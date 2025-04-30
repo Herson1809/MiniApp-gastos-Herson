@@ -49,3 +49,4 @@ if uploaded_file:
 
         # --- 7. Mostrar tabla detallada ---
         st.dataframe(filtro_df.sort_values(by='Monto', ascending=False))
+        
