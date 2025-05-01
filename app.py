@@ -1,64 +1,59 @@
-# app.py - MiniApp Versión 2 - Conectada a la nube y usando base limpia
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
 # --- 1. Título Principal ---
-st.markdown("""
-<h1 style='text-align: center; color: white;'>Dashboard de Gastos Regional - Herson Hernández</h1>
-""", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center; color: white;'>Gastos por mes período 2025</h1>", unsafe_allow_html=True)
 
-# --- BLOQUE 1. GASTOS POR MES (Resumen Visual con Totales) ---
-st.markdown("""
-<h3 style='color: #5fc542;'>▶ Gastos por mes del período 2025</h3>
-""", unsafe_allow_html=True)
+# --- 2. Datos Manuales ---
+data = {
+    'Mes': ['January', 'February', 'March', 'April'],
+    'Monto': [155185039.49, 142557960.86, 139691952.27, 82405901.16]
+}
+df = pd.DataFrame(data)
 
-# Datos fijos proporcionados (en pesos dominicanos, sin símbolo)
-meses = ['January', 'February', 'March', 'April']
-montos = [155185039.49, 142557960.86, 139691952.27, 82405901.16]
-total = sum(montos)
+# --- 3. Colores personalizados por mes ---
+colores = ['#002147', '#00B050', '#00B0F0', '#F79646']
 
-# Gráfico de barras
-fig, ax = plt.subplots()
-colores = ['#001f5b', '#00b24f', '#33b7d8', '#f79646']
-ax.bar(meses, montos, color=colores)
-ax.set_title("Gastos por mes periodo 2025")
-ax.bar_label(ax.containers[0], fmt='%.2f', label_type='edge')
+# --- 4. Crear gráfica ---
+fig, ax = plt.subplots(figsize=(8, 5))
+bars = ax.bar(df['Mes'], df['Monto'], color=colores)
+
+# Eliminar eje Y
+ax.spines['left'].set_visible(False)
+ax.spines['right'].set_visible(False)
+ax.spines['top'].set_visible(False)
+ax.yaxis.set_visible(False)
+
+# Agregar etiquetas sobre las barras
+for bar, valor in zip(bars, df['Monto']):
+    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{valor:,.2f}', 
+            ha='center', va='bottom', fontsize=10, fontweight='bold')
+
+# --- 5. Mostrar gráfica ---
 st.pyplot(fig)
 
-# Totales a la derecha
-st.markdown("""
-<style>
-.cuadro-total {
-    border: 1px solid black;
-    padding: 8px;
-    margin-bottom: 5px;
-    width: 220px;
-    font-weight: bold;
-    background-color: #f5f5f5;
-}
-.cuadro-total-final {
-    border: 2px solid black;
-    padding: 8px;
-    width: 220px;
-    font-weight: bold;
-    background-color: #e0e0e0;
-}
-</style>
-""", unsafe_allow_html=True)
+# --- 6. Mostrar valores a la derecha tipo tarjetas ---
+st.markdown("<hr>", unsafe_allow_html=True)
+for i in range(len(df)):
+    st.markdown(
+        f"""
+        <div style="border: 2px solid #333; padding: 10px; margin-bottom: 5px; background-color: #f5f5f5; text-align: center;">
+            <strong style="color: black;">{df['Mes'][i]}</strong><br>
+            <span style="color: black;">{df['Monto'][i]:,.2f}</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-for mes, monto in zip(meses, montos):
-    st.markdown(f"""
-    <div class='cuadro-total'>
-        {mes}: {monto:,.2f}
+# Total
+total = df['Monto'].sum()
+st.markdown(
+    f"""
+    <div style="background-color: #f5f5f5; padding: 10px; border-top: 3px double black; text-align: center;">
+        <strong style="color: black;">Total</strong><br>
+        <span style="color: black; font-weight: bold;">{total:,.2f}</span>
     </div>
-    """, unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class='cuadro-total-final'>
-    Total: {total:,.2f}
-</div>
-""", unsafe_allow_html=True)
-
-# --- Fin del bloque visual de resumen mensual ---
-
+    """,
+    unsafe_allow_html=True
+)
