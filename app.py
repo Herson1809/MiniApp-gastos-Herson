@@ -8,7 +8,7 @@ montos = [155185039.49, 142557960.86, 139691952.27, 82405901.16]
 total = sum(montos)
 
 # Diseño del layout
-col1, col2 = st.columns([3, 1])
+col1, col2 = st.columns([3, 1], gap="small")
 
 with col1:
     st.markdown("<h1 style='text-align: center; color: white;'>Dashboard Gastos República Dominicana - Creado por Herson Stan</h1>", unsafe_allow_html=True)
@@ -30,13 +30,9 @@ with col1:
     st.pyplot(fig)
 
 with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown(f"🟦 **January**<br>{montos[0]:,.2f}", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    for mes, monto, color in zip(meses, montos, ['🟦', '🟩', '🟦', '🟧']):
+        st.markdown(f"{color} <strong>{mes}</strong><br><span style='font-size:18px'>{monto:,.2f}</span><br><br>", unsafe_allow_html=True)
+
     st.markdown("---")
-    st.markdown(f"🟩 **February**<br>{montos[1]:,.2f}", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown(f"🟦 **March**<br>{montos[2]:,.2f}", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown(f"🟧 **April**<br>{montos[3]:,.2f}", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown(f"✅ **Total**<br><strong>{total:,.2f}</strong>", unsafe_allow_html=True)
+    st.markdown(f"✅ <strong>Total</strong><br><span style='font-size:20px'><strong>{total:,.2f}</strong></span>", unsafe_allow_html=True)
