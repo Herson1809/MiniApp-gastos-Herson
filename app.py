@@ -1,55 +1,41 @@
-import streamlit as st
-import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- Título ---
-st.markdown("""
-<h1 style='text-align: center; color: white;'>Dashboard de Gastos Regional - Herson Hernández</h1>
-""", unsafe_allow_html=True)
+# Datos
+meses = ['January', 'February', 'March', 'April']
+montos = [155_185_039.49, 142_557_960.86, 139_691_952.27, 82_405_901.16]
+colores = ['#001f3f', '#2ECC40', '#39CCCC', '#FF851B']
 
-# --- Carga del archivo Excel ---
-st.markdown("""
-<h3 style="color: #f5c542;">📂 Sube tu archivo Excel (.xlsx)</h3>
-""", unsafe_allow_html=True)
+# Crear figura y ejes
+fig, ax = plt.subplots(figsize=(10, 6))
+barras = ax.bar(meses, montos, color=colores)
 
-uploaded_file = st.file_uploader("Arrastra o selecciona tu archivo", type=["xlsx"])
+# Título principal
+plt.suptitle("Dashboard Gastos República Dominicana - Creado por Herson Stan", fontsize=16, fontweight='bold')
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+# Subtítulo
+ax.set_title("Gastos por mes periodo 2025", fontsize=13, fontweight='bold')
 
-    # Validar si existen columnas clave
-    if 'Mes' in df.columns and 'Monto' in df.columns:
+# Quitar bordes y eje Y
+ax.spines[['top', 'right', 'left']].set_visible(False)
+ax.tick_params(axis='y', left=False, labelleft=False)
 
-        # Agrupamos por Mes
-        resumen = df.groupby('Mes')['Monto'].sum().reset_index()
+# Etiquetas sobre las barras
+for barra, monto in zip(barras, montos):
+    ax.text(barra.get_x() + barra.get_width() / 2,
+            barra.get_height() + 3_000_000,
+            f"{monto:,.2f}",
+            ha='center', va='bottom', fontsize=10, fontweight='bold')
 
-        # Ordenamos manualmente
-        orden_meses = ["January", "February", "March", "April", "May", "June", "July",
-                       "August", "September", "October", "November", "December"]
-        resumen['Mes'] = pd.Categorical(resumen['Mes'], categories=orden_meses, ordered=True)
-        resumen = resumen.sort_values('Mes')
+# Valores a la derecha alineados visualmente con las barras
+alineaciones = [montos[0], montos[1], montos[2], montos[3]]
+for i, (mes, monto) in enumerate(zip(meses, montos)):
+    ax.text(4.2, alineaciones[i], f"{mes}: {int(monto):,}", va='center', fontsize=10)
 
-        # Gráfica + Indicadores
-        col1, col2 = st.columns([2, 1])
+# Total alineado al nivel de la barra más baja
+total = sum(montos)
+ax.text(4.2, 70_000_000, f"Total:\n{int(total):,}", fontsize=12, fontweight='bold', color='green')
 
-        with col1:
-            st.markdown("### 📊 Gasto por Mes - Fase 2")
-            fig, ax = plt.subplots(figsize=(6,4))
-            ax.bar(resumen['Mes'], resumen['Monto'], color=['#3498db', '#e67e22', '#2ecc71', '#9b59b6'])
-            ax.set_xlabel("Mes")
-            ax.set_ylabel("Monto (DOP)")
-            ax.set_title("Gastos por Mes (Fase 2)")
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
-
-        with col2:
-            st.markdown("### 📋 Totales por Mes")
-            for index, row in resumen.iterrows():
-                st.metric(label=f"{row['Mes']}", value=f"{row['Monto']:,.2f}")
-            st.divider()
-            st.metric(label="Gran Total", value=f"{resumen['Monto'].sum():,.2f}")
-
-    else:
-        st.error("❌ El archivo no contiene la columna 'Mes' o 'Monto'.")
-else:
-    st.info("📥 Sube un archivo Excel para comenzar.")
+# Ajustes finales
+ax.set_xlim(-0.5, 5)
+plt.tight_layout()
+plt.show()
