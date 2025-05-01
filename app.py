@@ -36,7 +36,7 @@ if uploaded_file:
             fig, ax = plt.subplots(figsize=(6,4))
             ax.bar(resumen['Mes'], resumen['Monto'], color=colores[:len(resumen)])
             ax.set_xlabel("Mes")
-            ax.set_ylabel("Monto")
+            ax.set_yticks([])  # Elimina los valores del eje Y
             ax.set_title("Gastos por mes periodo 2025")
             ax.tick_params(axis='x', rotation=45)
             st.pyplot(fig)
