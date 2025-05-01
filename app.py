@@ -39,3 +39,4 @@ ax.text(4.2, 70_000_000, f"Total:\n{int(total):,}", fontsize=12, fontweight='bol
 ax.set_xlim(-0.5, 5)
 plt.tight_layout()
 plt.show()
+
