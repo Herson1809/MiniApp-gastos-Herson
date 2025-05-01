@@ -3,7 +3,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # --- 1. Título Principal ---
-st.markdown("<h1 style='text-align: center; color: white;'>Gastos por mes período 2025</h1>", unsafe_allow_html=True)
+st.markdown("""
+<h1 style='text-align: center; color: white;'>Dashboard Gastos República Dominicana<br>Creado por Herson Stan</h1>
+""", unsafe_allow_html=True)
 
 # --- 2. Datos Manuales ---
 data = {
@@ -34,26 +36,28 @@ for bar, valor in zip(bars, df['Monto']):
 st.pyplot(fig)
 
 # --- 6. Mostrar valores a la derecha tipo tarjetas ---
-st.markdown("<hr>", unsafe_allow_html=True)
-for i in range(len(df)):
+col1, col2 = st.columns([2, 1])
+
+with col2:
+    for i in range(len(df)):
+        st.markdown(
+            f"""
+            <div style="border: 2px solid #333; padding: 10px; margin-bottom: 5px; background-color: #f5f5f5; text-align: center;">
+                <strong style="color: black;">{df['Mes'][i]}</strong><br>
+                <span style="color: black;">{df['Monto'][i]:,.2f}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # Total
+    total = df['Monto'].sum()
     st.markdown(
         f"""
-        <div style="border: 2px solid #333; padding: 10px; margin-bottom: 5px; background-color: #f5f5f5; text-align: center;">
-            <strong style="color: black;">{df['Mes'][i]}</strong><br>
-            <span style="color: black;">{df['Monto'][i]:,.2f}</span>
+        <div style="background-color: #f5f5f5; padding: 10px; border-top: 3px double black; text-align: center;">
+            <strong style="color: black;">Total</strong><br>
+            <span style="color: black; font-weight: bold;">{total:,.2f}</span>
         </div>
         """,
         unsafe_allow_html=True
     )
-
-# Total
-total = df['Monto'].sum()
-st.markdown(
-    f"""
-    <div style="background-color: #f5f5f5; padding: 10px; border-top: 3px double black; text-align: center;">
-        <strong style="color: black;">Total</strong><br>
-        <span style="color: black; font-weight: bold;">{total:,.2f}</span>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
