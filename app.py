@@ -2,62 +2,41 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --- 1. Título Principal ---
-st.markdown("""
-<h1 style='text-align: center; color: white;'>Dashboard Gastos República Dominicana<br>Creado por Herson Stan</h1>
-""", unsafe_allow_html=True)
+# Datos
+meses = ['January', 'February', 'March', 'April']
+montos = [155185039.49, 142557960.86, 139691952.27, 82405901.16]
+total = sum(montos)
 
-# --- 2. Datos Manuales ---
-data = {
-    'Mes': ['January', 'February', 'March', 'April'],
-    'Monto': [155185039.49, 142557960.86, 139691952.27, 82405901.16]
-}
-df = pd.DataFrame(data)
+# Diseño del layout
+col1, col2 = st.columns([3, 1])
 
-# --- 3. Colores personalizados por mes ---
-colores = ['#002147', '#00B050', '#00B0F0', '#F79646']
+with col1:
+    st.markdown("<h1 style='text-align: center; color: white;'>Dashboard Gastos República Dominicana - Creado por Herson Stan</h1>", unsafe_allow_html=True)
+    
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bars = ax.bar(meses, montos, color=['#002147', '#00A859', '#3CB4E5', '#FFA500'])
 
-# --- 4. Crear gráfica ---
-fig, ax = plt.subplots(figsize=(8, 5))
-bars = ax.bar(df['Mes'], df['Monto'], color=colores)
+    # Ocultar ejes innecesarios
+    ax.spines[['top', 'right', 'left']].set_visible(False)
+    ax.tick_params(left=False, bottom=False)
+    ax.set_yticks([])
 
-# Eliminar eje Y
-ax.spines['left'].set_visible(False)
-ax.spines['right'].set_visible(False)
-ax.spines['top'].set_visible(False)
-ax.yaxis.set_visible(False)
+    # Etiquetas sobre las barras
+    for bar, monto in zip(bars, montos):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f"{monto:,.2f}", 
+                ha='center', va='bottom', fontsize=9, fontweight='bold')
 
-# Agregar etiquetas sobre las barras
-for bar, valor in zip(bars, df['Monto']):
-    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f'{valor:,.2f}', 
-            ha='center', va='bottom', fontsize=10, fontweight='bold')
-
-# --- 5. Mostrar gráfica ---
-st.pyplot(fig)
-
-# --- 6. Mostrar valores a la derecha tipo tarjetas ---
-col1, col2 = st.columns([2, 1])
+    ax.set_title("Gastos por mes periodo 2025", fontsize=14, weight='bold')
+    st.pyplot(fig)
 
 with col2:
-    for i in range(len(df)):
-        st.markdown(
-            f"""
-            <div style="border: 2px solid #333; padding: 10px; margin-bottom: 5px; background-color: #f5f5f5; text-align: center;">
-                <strong style="color: black;">{df['Mes'][i]}</strong><br>
-                <span style="color: black;">{df['Monto'][i]:,.2f}</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    # Total
-    total = df['Monto'].sum()
-    st.markdown(
-        f"""
-        <div style="background-color: #f5f5f5; padding: 10px; border-top: 3px double black; text-align: center;">
-            <strong style="color: black;">Total</strong><br>
-            <span style="color: black; font-weight: bold;">{total:,.2f}</span>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"🟦 **January**<br>{montos[0]:,.2f}", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown(f"🟩 **February**<br>{montos[1]:,.2f}", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown(f"🟦 **March**<br>{montos[2]:,.2f}", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown(f"🟧 **April**<br>{montos[3]:,.2f}", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown(f"✅ **Total**<br><strong>{total:,.2f}</strong>", unsafe_allow_html=True)
