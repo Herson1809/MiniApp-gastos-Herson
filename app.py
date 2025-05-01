@@ -61,3 +61,4 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- Fin del bloque visual de resumen mensual ---
+
