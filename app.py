@@ -1,8 +1,7 @@
-# app.py - MiniApp Versión 2.1 – Exportación de Riesgo
+# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Total General
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from io import BytesIO
 
 # --- 1. Título Principal ---
 st.markdown("""
@@ -65,8 +64,16 @@ if uploaded_file:
         tabla = pd.pivot_table(df_riesgo, index='Categoria', columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
         tabla['Total'] = tabla.sum(axis=1)
         tabla['Grupo_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
-        columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
-        tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
+        tabla = tabla.reset_index()
+
+        # --- Fila de Total General ---
+        total_general = pd.DataFrame({
+            'Categoria': ['TOTAL GENERAL'],
+            **{col: [tabla[col].sum()] for col in ['January', 'February', 'March', 'April']},
+            'Total': [tabla['Total'].sum()],
+            'Grupo_Riesgo': ['★ TODOS LOS GRUPOS']
+        })
+        tabla = pd.concat([tabla, total_general], ignore_index=True)
 
         st.markdown("---")
         st.markdown("## 🚦 Tabla de Umbrales de Riesgo")
@@ -85,33 +92,17 @@ if uploaded_file:
         st.markdown("## 🔍 Análisis por Nivel de Riesgo")
         riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=tabla['Grupo_Riesgo'].unique())
 
-        tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion].copy()
-
-        # Agregamos fila TOTAL GENERAL
-        totales = tabla_filtrada[['January', 'February', 'March', 'April', 'Total']].sum().to_dict()
-        total_row = pd.DataFrame([{
-            'Categoria': 'TOTAL GENERAL',
-            'January': totales['January'],
-            'February': totales['February'],
-            'March': totales['March'],
-            'April': totales['April'],
-            'Total': totales['Total'],
-            'Grupo_Riesgo': ''
-        }])
-        tabla_filtrada = pd.concat([tabla_filtrada, total_row], ignore_index=True)
+        tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
 
         st.dataframe(tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
 
-        # Botón de descarga
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            tabla_filtrada.to_excel(writer, index=False, sheet_name="Riesgo")
-        st.download_button(
-            label="📥 Descargar análisis en Excel",
-            data=output.getvalue(),
-            file_name="Analisis_Nivel_Riesgo.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        # --- Descarga Excel ---
+        if st.button("🗃️ Descargar Excel del Grupo Seleccionado"):
+            ruta_salida = "Reporte_Grupo_Riesgo.xlsx"
+            with pd.ExcelWriter(ruta_salida, engine="xlsxwriter") as writer:
+                tabla_filtrada.to_excel(writer, sheet_name="Grupo Riesgo", index=False)
+            with open(ruta_salida, "rb") as file:
+                st.download_button(label="🗄️ Descargar archivo", data=file, file_name=ruta_salida)
 
 else:
-    st.info("📥 Sube un archivo Excel para comenzar.")
+    st.info("📅 Sube un archivo Excel para comenzar.")
