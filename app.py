@@ -122,3 +122,4 @@ if uploaded_file:
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
+
