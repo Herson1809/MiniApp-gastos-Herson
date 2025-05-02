@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 import base64
+import xlsxwriter
 
 # --- 1. Título Principal ---
 st.markdown("""
@@ -64,6 +65,11 @@ if uploaded_file:
         tabla = pd.pivot_table(df_riesgo, index='Categoria', columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
         tabla['Total'] = tabla.sum(axis=1)
         tabla['Grupo_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
+
+        orden_riesgo = {'🔴 Crítico': 0, '🟡 Moderado': 1, '🟢 Bajo': 2}
+        tabla['Orden'] = tabla['Grupo_Riesgo'].map(orden_riesgo)
+        tabla = tabla.sort_values(by='Orden').drop(columns='Orden')
+
         columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
         tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
 
@@ -97,19 +103,30 @@ if uploaded_file:
 
         st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias + ['Grupo_Riesgo']], use_container_width=True)
 
-        st.markdown("### 📄 Descargar Análisis en Excel con Auditoría Extendida")
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            tabla.to_excel(writer, sheet_name="Auditoría por Categoría", index=False)
-            df.to_excel(writer, sheet_name="Datos Originales", index=False)
-            resumen_mes_df = resumen_mes.reset_index()
-            resumen_mes_df.columns = ['Mes', 'Monto']
-            resumen_mes_df.to_excel(writer, sheet_name="Resumen Mensual", index=False)
+        st.markdown("### 📄 Descargar Auditoría por Categoría (Excel con colores)")
+        output_path = "/mnt/data/Auditoria_Categorias_Semaforo_Color.xlsx"
+        with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+            tabla.to_excel(writer, sheet_name='Auditoría Categorías', index=False)
+            workbook  = writer.book
+            worksheet = writer.sheets['Auditoría Categorías']
 
-        output.seek(0)
-        b64 = base64.b64encode(output.read()).decode()
-        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Auditoria_Categorias.xlsx">📥 Descargar Excel Completo</a>'
-        st.markdown(href, unsafe_allow_html=True)
+            rojo = workbook.add_format({'bg_color': '#FF9999'})
+            amarillo = workbook.add_format({'bg_color': '#FFEB99'})
+            verde = workbook.add_format({'bg_color': '#C6EFCE'})
+
+            for row_num, riesgo in enumerate(tabla['Grupo_Riesgo'], start=1):
+                col = tabla.columns.get_loc('Grupo_Riesgo')
+                if 'Crítico' in riesgo:
+                    worksheet.write(row_num, col, riesgo, rojo)
+                elif 'Moderado' in riesgo:
+                    worksheet.write(row_num, col, riesgo, amarillo)
+                elif 'Bajo' in riesgo:
+                    worksheet.write(row_num, col, riesgo, verde)
+
+        with open(output_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Auditoria_Categorias_Semaforo_Color.xlsx">📥 Descargar Excel con Colores</a>'
+            st.markdown(href, unsafe_allow_html=True)
 
 else:
     st.info("📅 Sube un archivo Excel para comenzar.")
