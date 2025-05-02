@@ -26,8 +26,7 @@ if uploaded_file:
 
         # --- 3. BLOQUE: Gráfico de gastos por mes ---
         resumen_mes = df.groupby('Mes')['Monto'].sum().reindex(
-            ['January', 'February', 'March', 'April', 'May', 'June', 'July',
-             'August', 'September', 'October', 'November', 'December']
+            ['January', 'February', 'March', 'April']
         )
 
         col1, col2 = st.columns([2, 1])
@@ -35,24 +34,22 @@ if uploaded_file:
         with col1:
             st.markdown("### 📊 Gasto por Mes")
             fig, ax = plt.subplots(figsize=(6, 4))
-            colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
+            colores = ['#5DADE2', '#85C1E9', '#F5B041', '#F8C471']
             resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
             ax.set_xlabel("Mes")
-            ax.set_ylabel("Monto")
-            ax.set_title("Gasto Mensual")
-            ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
+            ax.set_title("Gastos por mes periodo 2025")
+            ax.set_xticklabels(resumen_mes.dropna().index, rotation=45)
             ax.get_yaxis().set_visible(False)
             st.pyplot(fig)
 
         with col2:
-            st.markdown("### 📋 Totales por Mes")
+            st.markdown("### 💵 Totales por Mes")
             for mes, valor in resumen_mes.dropna().items():
                 st.metric(label=mes, value=f"{valor:,.0f}")
             st.divider()
-            st.metric(label="Gran Total", value=f"{resumen_mes.sum():,.0f}")
+            st.metric(label="Total", value=f"{resumen_mes.sum():,.0f}")
 
         # --- 4. BLOQUE: Análisis por grupo de riesgo ---
-        # Definimos umbrales
         def clasificar_riesgo(monto_total):
             if monto_total >= 30000000:
                 return "🔴 Crítico (≥ $30M)"
@@ -68,14 +65,16 @@ if uploaded_file:
         columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
         tabla = tabla.reset_index()[['Descripcion'] + columnas_ordenadas]
 
-        # Selector visual por riesgo
         st.markdown("---")
-        st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+        st.markdown("## 🔎 Análisis por Nivel de Riesgo")
         riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=tabla['Grupo_Riesgo'].unique())
 
         tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
 
-        st.dataframe(tabla_filtrada[['Descripcion', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+        st.dataframe(
+            tabla_filtrada[['Descripcion', 'January', 'February', 'March', 'April', 'Total']],
+            use_container_width=True
+        )
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
