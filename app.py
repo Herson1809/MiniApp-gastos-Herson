@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Criticidad Corregida + Total y Descarga
+# app.py - MiniApp Versión 2.1 – Exportación de Riesgo
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
