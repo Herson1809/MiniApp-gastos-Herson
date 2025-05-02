@@ -1,7 +1,8 @@
-# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Criticidad Corregida
+# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Criticidad Corregida + Total y Descarga
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from io import BytesIO
 
 # --- 1. Título Principal ---
 st.markdown("""
@@ -84,9 +85,33 @@ if uploaded_file:
         st.markdown("## 🔍 Análisis por Nivel de Riesgo")
         riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=tabla['Grupo_Riesgo'].unique())
 
-        tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
+        tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion].copy()
+
+        # Agregamos fila TOTAL GENERAL
+        totales = tabla_filtrada[['January', 'February', 'March', 'April', 'Total']].sum().to_dict()
+        total_row = pd.DataFrame([{
+            'Categoria': 'TOTAL GENERAL',
+            'January': totales['January'],
+            'February': totales['February'],
+            'March': totales['March'],
+            'April': totales['April'],
+            'Total': totales['Total'],
+            'Grupo_Riesgo': ''
+        }])
+        tabla_filtrada = pd.concat([tabla_filtrada, total_row], ignore_index=True)
 
         st.dataframe(tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+
+        # Botón de descarga
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            tabla_filtrada.to_excel(writer, index=False, sheet_name="Riesgo")
+        st.download_button(
+            label="📥 Descargar análisis en Excel",
+            data=output.getvalue(),
+            file_name="Analisis_Nivel_Riesgo.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
