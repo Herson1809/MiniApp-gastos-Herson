@@ -56,25 +56,19 @@ if uploaded_file:
                 return "🟢 Bajo (< $3M)"
 
         df_riesgo = df.copy()
-        tabla = pd.pivot_table(df_riesgo, index='Descripcion', columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
+        tabla = pd.pivot_table(df_riesgo, index='Categoria', columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
         tabla['Total'] = tabla.sum(axis=1)
         tabla['Grupo_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
-        tabla = tabla.reset_index()[['Descripcion', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
-        tabla.rename(columns={'Descripcion': 'Categoria'}, inplace=True)
+        tabla = tabla.reset_index()[['Categoria', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
 
         st.markdown("---")
         st.markdown("## 🧭 Mapa de riesgo")
         st.markdown("""
         <table style="width:100%; text-align:center">
             <tr>
-                <th style="color:white">Crítico</th>
-                <th style="color:white">Moderado</th>
-                <th style="color:white">Bajo</th>
-            </tr>
-            <tr>
-                <td style="color:red; font-size:40px;">●</td>
-                <td style="color:orange; font-size:40px;">●</td>
-                <td style="color:green; font-size:40px;">●</td>
+                <th style="color:white">🔴 Crítico</th>
+                <th style="color:white">🟡 Moderado</th>
+                <th style="color:white">🟢 Bajo</th>
             </tr>
             <tr>
                 <td style="color:white;">≥ 6,000,000.00</td>
@@ -90,7 +84,6 @@ if uploaded_file:
 
         st.dataframe(tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
 
-        # TOTAL DEL GRUPO SELECCIONADO
         st.markdown("### 📌 Total del grupo seleccionado")
         total_riesgo = tabla_filtrada[['January', 'February', 'March', 'April', 'Total']].sum()
         st.dataframe(pd.DataFrame([total_riesgo], index=[f"🔍 Total {riesgo_opcion}"]), use_container_width=True)
