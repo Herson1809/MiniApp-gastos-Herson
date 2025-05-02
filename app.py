@@ -2,6 +2,8 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
 
 # --- 1. Título Principal ---
 st.markdown("""
@@ -98,22 +100,24 @@ if uploaded_file:
 
         st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias], use_container_width=True)
 
-        # --- Exportación a Excel ---
-        st.markdown("### 📤 Descargar Análisis en Excel")
-        output = tabla_filtrada[['Categoria'] + columnas_monetarias]
-        output_excel = output.copy()
-        for col in columnas_monetarias:
-            output_excel[col] = output_excel[col].round(0)
+        # --- Exportación a Excel con múltiples hojas ---
+        st.markdown("### 📤 Descargar Análisis en Excel con Múltiples Hojas")
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            # Hoja 1: Análisis por Nivel de Riesgo
+            tabla_filtrada.to_excel(writer, sheet_name="Análisis Riesgo", index=False)
 
-        from io import BytesIO
-        import base64
+            # Hoja 2: Datos Originales
+            df.to_excel(writer, sheet_name="Datos Originales", index=False)
 
-        buffer = BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            output_excel.to_excel(writer, sheet_name="Riesgo", index=False)
-        buffer.seek(0)
-        b64 = base64.b64encode(buffer.read()).decode()
-        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Analisis_Riesgo.xlsx">📥 Descargar Excel</a>'
+            # Hoja 3: Resumen Mensual
+            resumen_mes_df = resumen_mes.reset_index()
+            resumen_mes_df.columns = ['Mes', 'Monto']
+            resumen_mes_df.to_excel(writer, sheet_name="Resumen Mensual", index=False)
+
+        output.seek(0)
+        b64 = base64.b64encode(output.read()).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Analisis_Completo.xlsx">📥 Descargar Excel Completo</a>'
         st.markdown(href, unsafe_allow_html=True)
 
 else:
