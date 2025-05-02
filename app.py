@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con formato RD$ sin decimales
+# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Criticidad Corregida y formato RD$
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -75,44 +75,46 @@ if uploaded_file:
             <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
           </tr>
           <tr>
-            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y &lt; RD$6,000,000</td><td>&lt; RD$3,000,000</td>
           </tr>
         </table>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown("## 🔍 Análisis por Nivel de Riesgo")
-        opciones = ['🔴 Crítico (≥ RD$6M)', '🟡 Moderado (≥ RD$3M y < RD$6M)', '🟢 Bajo (< RD$3M)', 'Ver Todos']
+        opciones = ['Ver Todos'] + sorted(tabla['Grupo_Riesgo'].unique())
         riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
 
         if riesgo_opcion == 'Ver Todos':
-            tabla_filtrada = tabla.copy()
+            tabla_filtrada = tabla
         else:
             tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
 
-        # Formatear valores para mostrar como RD$ sin decimales
-        tabla_formateada = tabla_filtrada.copy()
-        for col in ['January', 'February', 'March', 'April', 'Total']:
-            tabla_formateada[col] = tabla_formateada[col].apply(lambda x: f"RD${x:,.0f}")
+        # Formatear sin decimales
+        tabla_mostrar = tabla_filtrada.copy()
+        columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
+        for col in columnas_monetarias:
+            tabla_mostrar[col] = tabla_mostrar[col].apply(lambda x: f"RD${x:,.0f}")
 
-        st.dataframe(tabla_formateada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+        st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias], use_container_width=True)
 
-        # Botón para descargar
-        st.markdown("---")
-        st.markdown("### 📄 Descargar reporte de riesgo")
-        excel_riesgo = tabla[['Categoria', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
-        excel_riesgo_sorted = excel_riesgo.sort_values(by='Total', ascending=False)
-        output = pd.ExcelWriter("Reporte_Riesgo.xlsx", engine='xlsxwriter')
-        excel_riesgo_sorted.to_excel(output, sheet_name="Riesgo", index=False)
-        output.close()
+        # --- Exportación a Excel ---
+        st.markdown("### 📤 Descargar Análisis en Excel")
+        output = tabla_filtrada[['Categoria'] + columnas_monetarias]
+        output_excel = output.copy()
+        for col in columnas_monetarias:
+            output_excel[col] = output_excel[col].round(0)
 
-        with open("Reporte_Riesgo.xlsx", "rb") as file:
-            st.download_button(
-                label="🔀 Descargar Excel de Riesgos",
-                data=file,
-                file_name="Reporte_Riesgo.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        from io import BytesIO
+        import base64
+
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            output_excel.to_excel(writer, sheet_name="Riesgo", index=False)
+        buffer.seek(0)
+        b64 = base64.b64encode(buffer.read()).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Analisis_Riesgo.xlsx">📥 Descargar Excel</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
 else:
-    st.info("📅 Sube un archivo Excel para comenzar.")
+    st.info("📥 Sube un archivo Excel para comenzar.")
