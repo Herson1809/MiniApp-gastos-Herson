@@ -69,6 +69,16 @@ if uploaded_file:
 
         # Mostrar tabla final
         st.dataframe(final[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+        # Mostrar la tabla filtrada
+st.dataframe(tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+
+# Total del grupo de riesgo seleccionado
+st.markdown("### 🔢 Total del grupo seleccionado")
+total_riesgo = tabla_filtrada[['January', 'February', 'March', 'April', 'Total']].sum()
+st.dataframe(
+    pd.DataFrame([total_riesgo], index=[f"🔍 Total {riesgo_opcion}"]),
+    use_container_width=True
+)
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
