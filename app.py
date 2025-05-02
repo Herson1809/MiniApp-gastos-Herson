@@ -35,7 +35,7 @@ if uploaded_file:
         col1, col2 = st.columns([2, 1])
 
         with col1:
-            st.markdown("### 🌃 Gasto por Mes")
+            st.markdown("### 📊 Gasto por Mes")
             fig, ax = plt.subplots(figsize=(6, 4))
             colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
             resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
@@ -74,7 +74,7 @@ if uploaded_file:
         tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
 
         st.markdown("---")
-        st.markdown("## 🚦 Tabla de Umbrales de Riesgo")
+        st.markdown("## 🛆 Tabla de Umbrales de Riesgo")
         st.markdown("""
         <table style='width:100%; text-align:center;'>
           <tr>
@@ -104,10 +104,10 @@ if uploaded_file:
         st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias + ['Grupo_Riesgo']], use_container_width=True)
 
         st.markdown("### 📄 Descargar Auditoría por Categoría (Excel con colores)")
-        output_path = "/mnt/data/Auditoria_Categorias_Semaforo_Color.xlsx"
-        with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             tabla.to_excel(writer, sheet_name='Auditoría Categorías', index=False)
-            workbook  = writer.book
+            workbook = writer.book
             worksheet = writer.sheets['Auditoría Categorías']
 
             rojo = workbook.add_format({'bg_color': '#FF9999'})
@@ -123,10 +123,10 @@ if uploaded_file:
                 elif 'Bajo' in riesgo:
                     worksheet.write(row_num, col, riesgo, verde)
 
-        with open(output_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Auditoria_Categorias_Semaforo_Color.xlsx">📥 Descargar Excel con Colores</a>'
-            st.markdown(href, unsafe_allow_html=True)
+        output.seek(0)
+        b64 = base64.b64encode(output.read()).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Auditoria_Categorias_Semaforo_Color.xlsx">📥 Descargar Excel con Colores</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
 else:
-    st.info("📅 Sube un archivo Excel para comenzar.")
+    st.info("📥 Sube un archivo Excel para comenzar.")
