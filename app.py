@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con Total General
+# app.py - MiniApp Versión 2 - Dashboard de Gastos Regional con formato RD$ sin decimales
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -47,33 +47,25 @@ if uploaded_file:
         with col2:
             st.markdown("### 📋 Totales por Mes")
             for mes, valor in resumen_mes.dropna().items():
-                st.metric(label=mes, value=f"{valor:,.0f}")
+                st.metric(label=mes, value=f"RD${valor:,.0f}")
             st.divider()
-            st.metric(label="Gran Total", value=f"{resumen_mes.sum():,.0f}")
+            st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
         # --- BLOQUE 2: Análisis por Nivel de Riesgo ---
         def clasificar_riesgo(monto_total):
             if monto_total >= 6000000:
-                return "🔴 Crítico (≥ $6M)"
+                return "🔴 Crítico (≥ RD$6M)"
             elif monto_total >= 3000000:
-                return "🟡 Moderado (≥ $3M y < $6M)"
+                return "🟡 Moderado (≥ RD$3M y < RD$6M)"
             else:
-                return "🟢 Bajo (< $3M)"
+                return "🟢 Bajo (< RD$3M)"
 
         df_riesgo = df.copy()
         tabla = pd.pivot_table(df_riesgo, index='Categoria', columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
         tabla['Total'] = tabla.sum(axis=1)
         tabla['Grupo_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
-        tabla = tabla.reset_index()
-
-        # --- Fila de Total General ---
-        total_general = pd.DataFrame({
-            'Categoria': ['TOTAL GENERAL'],
-            **{col: [tabla[col].sum()] for col in ['January', 'February', 'March', 'April']},
-            'Total': [tabla['Total'].sum()],
-            'Grupo_Riesgo': ['★ TODOS LOS GRUPOS']
-        })
-        tabla = pd.concat([tabla, total_general], ignore_index=True)
+        columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
+        tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
 
         st.markdown("---")
         st.markdown("## 🚦 Tabla de Umbrales de Riesgo")
@@ -83,26 +75,44 @@ if uploaded_file:
             <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
           </tr>
           <tr>
-            <td>≥ $6,000,000</td><td>≥ $3,000,000 y &lt; $6,000,000</td><td>&lt; $3,000,000</td>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
           </tr>
         </table>
         """, unsafe_allow_html=True)
 
         st.markdown("---")
         st.markdown("## 🔍 Análisis por Nivel de Riesgo")
-        riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=tabla['Grupo_Riesgo'].unique())
+        opciones = ['🔴 Crítico (≥ RD$6M)', '🟡 Moderado (≥ RD$3M y < RD$6M)', '🟢 Bajo (< RD$3M)', 'Ver Todos']
+        riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
 
-        tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
+        if riesgo_opcion == 'Ver Todos':
+            tabla_filtrada = tabla.copy()
+        else:
+            tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
 
-        st.dataframe(tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+        # Formatear valores para mostrar como RD$ sin decimales
+        tabla_formateada = tabla_filtrada.copy()
+        for col in ['January', 'February', 'March', 'April', 'Total']:
+            tabla_formateada[col] = tabla_formateada[col].apply(lambda x: f"RD${x:,.0f}")
 
-        # --- Descarga Excel ---
-        if st.button("🗃️ Descargar Excel del Grupo Seleccionado"):
-            ruta_salida = "Reporte_Grupo_Riesgo.xlsx"
-            with pd.ExcelWriter(ruta_salida, engine="xlsxwriter") as writer:
-                tabla_filtrada.to_excel(writer, sheet_name="Grupo Riesgo", index=False)
-            with open(ruta_salida, "rb") as file:
-                st.download_button(label="🗄️ Descargar archivo", data=file, file_name=ruta_salida)
+        st.dataframe(tabla_formateada[['Categoria', 'January', 'February', 'March', 'April', 'Total']], use_container_width=True)
+
+        # Botón para descargar
+        st.markdown("---")
+        st.markdown("### 📄 Descargar reporte de riesgo")
+        excel_riesgo = tabla[['Categoria', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
+        excel_riesgo_sorted = excel_riesgo.sort_values(by='Total', ascending=False)
+        output = pd.ExcelWriter("Reporte_Riesgo.xlsx", engine='xlsxwriter')
+        excel_riesgo_sorted.to_excel(output, sheet_name="Riesgo", index=False)
+        output.close()
+
+        with open("Reporte_Riesgo.xlsx", "rb") as file:
+            st.download_button(
+                label="🔀 Descargar Excel de Riesgos",
+                data=file,
+                file_name="Reporte_Riesgo.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 else:
     st.info("📅 Sube un archivo Excel para comenzar.")
