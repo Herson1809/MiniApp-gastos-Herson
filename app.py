@@ -42,7 +42,7 @@ if uploaded_file:
             st.markdown("**Bajo**")
             st.markdown("<div style='background-color:#28a745;padding:10px;border-radius:5px;text-align:center;'> < 3,000,000.00</div>", unsafe_allow_html=True)
 
-        # Pivot y cálculo de riesgo
+        # Pivot y cálculo de riesgo por 'Categoria'
         tabla = pd.pivot_table(df, index='Categoria', columns='Nombre_Mes', values='Monto', aggfunc='sum', fill_value=0)
         tabla['Total'] = tabla.sum(axis=1)
         tabla['Nivel_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
@@ -55,7 +55,7 @@ if uploaded_file:
         riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=tabla['Nivel_Riesgo'].unique())
         filtrado = tabla[tabla['Nivel_Riesgo'] == riesgo_opcion]
 
-        # Mostrar tabla
+        # Mostrar tabla (con 'Categoria' como título de columna)
         st.dataframe(filtrado[['Categoria'] + columnas_validas + ['Total']], use_container_width=True)
 
 else:
