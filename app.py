@@ -45,8 +45,56 @@ if archivo:
         st.markdown("---")
         st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # --- BLOQUE 3: DESCARGA DEL ARCHIVO FINAL ---
-    st.markdown("### 📥 Descargar Reporte de Auditoría Consolidado")
+    # --- BLOQUE 3: TABLA DE UMBRALES ---
+    st.markdown("---")
+    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
+    st.markdown("""
+    <table style='width:100%; text-align:center;'>
+        <tr>
+            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
+        </tr>
+        <tr>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
+        </tr>
+    </table>
+    """, unsafe_allow_html=True)
+
+    # --- BLOQUE 4: ANÁLISIS POR RIESGO ---
+    st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+
+    def clasificar_riesgo(monto_total):
+        if monto_total >= 6000000:
+            return "🔴 Crítico"
+        elif monto_total >= 3000000:
+            return "🟡 Moderado"
+        else:
+            return "🟢 Bajo"
+
+    tabla = df.copy()
+    tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+
+    resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
+    resumen['Total'] = resumen.sum(axis=1)
+    resumen = resumen.reset_index()
+
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
+    riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+
+    if riesgo_opcion == 'Ver Todos':
+        tabla_filtrada = resumen
+    else:
+        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion]
+
+    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
+    for col in columnas_monetarias:
+        if col in tabla_filtrada.columns:
+            tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.0f}")
+
+    st.dataframe(tabla_filtrada[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
+
+    # --- BLOQUE 5: DESCARGA DEL REPORTE FINAL ---
+    st.markdown("---")
+    st.markdown("## 🧾 Descargar Reporte de Auditoría Consolidado")
 
     try:
         with open("Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx", "rb") as f:
@@ -55,6 +103,4 @@ if archivo:
             href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx">📄 Descargar Cédula de Trabajo de Auditoría</a>'
             st.markdown(href, unsafe_allow_html=True)
     except FileNotFoundError:
-        st.error("❌ El archivo final de auditoría no se encuentra en la ruta especificada. Asegúrate de subir o generar el archivo correctamente.")
-else:
-    st.info("🔄 Esperando que subas un archivo para procesar.")
+        st.error("❌ El archivo 'Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx' no fue encontrado. Asegúrate de subirlo al entorno del proyecto.")
