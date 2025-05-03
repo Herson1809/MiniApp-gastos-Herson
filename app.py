@@ -1,123 +1,95 @@
-# app.py - MiniApp Auditoría de Gastos por Categoría (Final Validado)
-import streamlit as st
+# Bloque: Generar hoja 'Auditoría Sucursales' con formato validado
 import pandas as pd
-import matplotlib.pyplot as plt
-import base64
+import streamlit as st
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from io import BytesIO
-import xlsxwriter
 
-# --- TÍTULO PRINCIPAL ---
-st.markdown("""
-<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>
-""", unsafe_allow_html=True)
+# Filtrar y procesar la base cargada
+df = df_base.copy()
 
-# --- BLOQUE 1: CARGA DE ARCHIVO ---
-st.markdown("### ▶️ Sube tu archivo Excel (.xlsx)")
-archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
+# Clasificación del riesgo
+def clasificar_riesgo(monto):
+    if monto >= 60000:
+        return "🔴 Crítico"
+    elif monto >= 30000:
+        return "🟡 Moderado"
+    else:
+        return "🟢 Bajo"
 
-if archivo:
-    df = pd.read_excel(archivo)
-    df['Fecha'] = pd.to_datetime(df['Fecha'])
-    df['Mes'] = df['Fecha'].dt.strftime('%B')
+df["Grupo de Riesgo"] = df.groupby("Categoría")["Monto"].transform("sum").apply(clasificar_riesgo)
 
-    # --- BLOQUE 2: VISUALIZACIÓN GRÁFICA ---
-    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex([
-        'January', 'February', 'March', 'April'
-    ])
+# Calcular gasto total por sucursal
+total_por_sucursal = df.groupby("Sucursales")["Monto"].transform("sum")
+df["Gasto Total de Sucursal"] = total_por_sucursal
+df["Participación (%)"] = (df["Monto"] / total_por_sucursal * 100).round(2)
 
-    col1, col2 = st.columns([2, 1])
+# Columna ¿Prioridad para Revisión?
+df["¿Prioridad para Revisión?"] = df.apply(
+    lambda row: "✅ Sí" if row["Grupo de Riesgo"] == "🔴 Crítico" or row["Participación (%)"] > 30 else "🔍 No", axis=1
+)
 
-    with col1:
-        st.markdown("### 📊 Gasto por Mes")
-        fig, ax = plt.subplots(figsize=(6, 4))
-        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
-        resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
-        ax.set_xlabel("Mes")
-        ax.set_ylabel("Monto")
-        ax.set_title("Gasto Mensual")
-        ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
-        ax.get_yaxis().set_visible(False)
-        st.pyplot(fig)
+# Selección y orden de columnas
+df_export = df[[
+    "Sucursales", "Grupo de Riesgo", "Categoria", "Descripcion", "Fecha",
+    "Monto", "Gasto Total de Sucursal", "Participación (%)", "¿Prioridad para Revisión?"
+]].copy()
 
-    with col2:
-        st.markdown("### 🧾 Totales por Mes")
-        for mes, valor in resumen_mes.dropna().items():
-            st.metric(label=mes, value=f"RD${valor:,.0f}")
-        st.markdown("---")
-        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+# Formato adicional
+df_export["Monto"] = df_export["Monto"].apply(lambda x: f"{x:,.2f}")
+df_export["Gasto Total de Sucursal"] = df_export["Gasto Total de Sucursal"].apply(lambda x: f"{x:,.2f}")
+df_export["Fecha"] = pd.to_datetime(df_export["Fecha"]).dt.strftime('%Y-%m-%d')
 
-    # --- BLOQUE 3: TABLA DE UMBRALES ---
-    st.markdown("---")
-    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
-    st.markdown("""
-    <table style='width:100%; text-align:center;'>
-        <tr>
-            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
-        </tr>
-        <tr>
-            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
-        </tr>
-    </table>
-    """, unsafe_allow_html=True)
+# Ordenar por prioridad y participación
+df_export.sort_values(by=["¿Prioridad para Revisión?", "Participación (%)"], ascending=[False, False], inplace=True)
 
-    # --- BLOQUE 4: ANÁLISIS POR RIESGO ---
-    st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+# Generar archivo Excel
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.title = "Auditoría Sucursales"
 
-    def clasificar_riesgo(monto_total):
-        if monto_total >= 6000000:
-            return "🔴 Crítico"
-        elif monto_total >= 3000000:
-            return "🟡 Moderado"
-        else:
-            return "🟢 Bajo"
+# Encabezado institucional
+ws["A1"] = "Auditoría grupo Farmavalue"
+ws["A1"].font = Font(size=28, bold=True, color="FF0000")
+ws.merge_cells("A1:L1")
 
-    tabla = df.copy()
-    tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+ws["A2"] = "Reporte de gastos del 01 de Enero al 20 de abril del 2025"
+ws.merge_cells("A2:L2")
 
-    resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
-    resumen['Total'] = resumen.sum(axis=1)
-    resumen = resumen.reset_index()
+ws["A3"] = "Auditor Asignado:"
+ws["A4"] = "Fecha de la Auditoría"
 
-    resumen['No'] = range(1, len(resumen) + 1)
-    resumen = resumen[['No', 'Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total']]
-    resumen = resumen.sort_values(by='Total', ascending=False).reset_index(drop=True)
+# Escribir encabezado de tabla desde A6
+headers = list(df_export.columns) + ["Verificado", "No Verificado", "Comentario del Auditor"]
+ws.append(headers)
 
-    total_row = pd.DataFrame(resumen[['January', 'February', 'March', 'April', 'Total']].sum()).T
-    total_row.insert(0, 'Grupo_Riesgo', '')
-    total_row.insert(0, 'Categoria', 'TOTAL GENERAL')
-    total_row.insert(0, 'No', '')
-    resumen = pd.concat([resumen, total_row], ignore_index=True)
+# Estilo para encabezados
+for col in range(1, len(headers)+1):
+    cell = ws.cell(row=6, column=col)
+    cell.font = Font(bold=True)
+    cell.fill = PatternFill("solid", fgColor="D9D9D9")
+    cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Formato en miles y con 2 decimales
-    columnas_miles = ['January', 'February', 'March', 'April', 'Total']
-    for col in columnas_miles:
-        resumen[col] = resumen[col].apply(lambda x: f"{x/1000:,.2f}" if pd.notnull(x) and x != '' else '')
+# Agregar datos desde fila 7
+for row in df_export.itertuples(index=False):
+    fila = list(row) + ["☐", "☐", ""]
+    ws.append(fila)
 
-    st.dataframe(resumen, use_container_width=True)
+# Ajustar alineaciones y justificación
+for row in ws.iter_rows(min_row=6, max_row=ws.max_row):
+    for cell in row:
+        cell.alignment = Alignment(horizontal="left", vertical="center")
 
-    # --- BLOQUE 5: DESCARGA DE REPORTE ---
-    st.markdown("---")
-    st.markdown("## 🧾 Descargar Cédula de Resumen por Categoría")
+# Guardar archivo en memoria
+output = BytesIO()
+wb.save(output)
+output.seek(0)
 
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        resumen.to_excel(writer, sheet_name='Resumen por Categoría', index=False, startrow=5)
-        workbook = writer.book
-        worksheet = writer.sheets['Resumen por Categoría']
-
-        # Encabezado personalizado
-        encabezado = [
-            ("A1", "Auditoría grupo Farmavalue", 28, 'red'),
-            ("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", 12, 'black'),
-            ("A3", "Auditor Asignado:", 12, 'black'),
-            ("A4", "Fecha de la Auditoría", 12, 'black')
-        ]
-        for cell, text, size, color in encabezado:
-            formato = workbook.add_format({'font_size': size, 'bold': True, 'font_color': color})
-            worksheet.write(cell, text, formato)
-
-    output.seek(0)
-    b64 = base64.b64encode(output.read()).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_Resumen_Categoria_FINAL_OK.xlsx">📄 Descargar Excel Validado</a>'
-    st.markdown(href, unsafe_allow_html=True)
-
+# Botón de descarga
+st.markdown("### 📥 Descargar reporte de Auditoría por Sucursales")
+st.download_button(
+    label="📊 Descargar Auditoría Sucursales",
+    data=output,
+    file_name="Auditoria_Sucursales_Formato_Final_OK_v2.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
