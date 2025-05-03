@@ -120,3 +120,4 @@ if archivo:
     b64 = base64.b64encode(output.read()).decode()
     href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_Resumen_Categoria_FINAL_OK.xlsx">📄 Descargar Excel Validado</a>'
     st.markdown(href, unsafe_allow_html=True)
+
