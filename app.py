@@ -1,4 +1,3 @@
-# app.py - MiniApp Versión 2 con Auditoría completa por Categoría y Sucursal
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -101,49 +100,53 @@ if uploaded_file:
 
         st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias + ['Grupo_Riesgo']], use_container_width=True)
 
-        # BLOQUE 2: Auditoría por Sucursal de Categorías Críticas
-        criticas = tabla[tabla['Grupo_Riesgo'] == '🔴 Crítico']['Categoria'].tolist()
-        df_critico = df[df['Categoria'].isin(criticas)]
+        # EXPORTACIÓN CÉDULA DE TRABAJO
+        st.markdown("### 📤 Descargar Cédula de Trabajo de Auditoría")
 
-        def marcar_revision(desc):
-            desc = str(desc).lower()
-            if len(desc) < 15 or any(x in desc for x in ['varios', 'otros', 'misc']):
-                return '✅ Sí'
-            return '🔍 No'
+        def generar_cedula_de_auditoria(df_resumen_categoria, df_resumen_sucursal, df_auditoria_sucursal):
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_resumen_categoria.to_excel(writer, sheet_name="Resumen por Categoría", startrow=6, index=False)
+                df_resumen_sucursal.to_excel(writer, sheet_name="Resumen por Sucursal", startrow=6, index=False)
+                df_auditoria_sucursal.to_excel(writer, sheet_name="Auditoría Sucursales", startrow=6, index=False)
 
-        df_critico['¿Revisar?'] = df_critico['Descripcion'].apply(marcar_revision)
-        auditoria_sucursal = df_critico.groupby(['Sucursales', 'Categoria', 'Descripcion', '¿Revisar?'])['Monto'].sum().reset_index()
-        auditoria_sucursal = auditoria_sucursal.sort_values(by='Monto', ascending=False)
+                wb = writer.book
+                h = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+                s = wb.add_format({'font_size': 12})
+                l = wb.add_format({'bold': True, 'font_size': 12})
+                miles_format = wb.add_format({'num_format': '#,##0'})
+                centrado = wb.add_format({'align': 'center'})
 
-        # EXPORTACIÓN COMPLETA
-        st.markdown("### 📤 Descargar Excel con Auditoría Completa")
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            tabla.to_excel(writer, sheet_name='Auditoría Categorías', index=False)
-            workbook = writer.book
-            worksheet = writer.sheets['Auditoría Categorías']
-            rojo = workbook.add_format({'bg_color': '#FF9999'})
-            amarillo = workbook.add_format({'bg_color': '#FFEB99'})
-            verde = workbook.add_format({'bg_color': '#C6EFCE'})
-            for row_num, riesgo in enumerate(tabla['Grupo_Riesgo'], start=1):
-                col = tabla.columns.get_loc('Grupo_Riesgo')
-                if 'Crítico' in riesgo:
-                    worksheet.write(row_num, col, riesgo, rojo)
-                elif 'Moderado' in riesgo:
-                    worksheet.write(row_num, col, riesgo, amarillo)
-                elif 'Bajo' in riesgo:
-                    worksheet.write(row_num, col, riesgo, verde)
+                for hoja in ["Resumen por Categoría", "Resumen por Sucursal", "Auditoría Sucursales"]:
+                    ws = writer.sheets[hoja]
+                    ws.write("A1", "Auditoría grupo Farmavalue", h)
+                    ws.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", s)
+                    ws.write("A3", "Auditor Asignado:", l)
+                    ws.write("A4", "Fecha de la Auditoría:", l)
 
-            resumen_mes_df = resumen_mes.reset_index()
-            resumen_mes_df.columns = ['Mes', 'Monto']
-            resumen_mes_df.to_excel(writer, sheet_name="Resumen Mensual", index=False)
-            df.to_excel(writer, sheet_name="Datos Originales", index=False)
-            auditoria_sucursal.to_excel(writer, sheet_name="Auditoría Sucursales", index=False)
+                ws_auditoria = writer.sheets["Auditoría Sucursales"]
+                columnas = df_auditoria_sucursal.columns.tolist()
+                if 'Monto' in columnas:
+                    col_idx = columnas.index('Monto')
+                    ws_auditoria.set_column(col_idx, col_idx, 12, miles_format)
+                if 'Total_Sucursal' in columnas:
+                    col_idx = columnas.index('Total_Sucursal')
+                    ws_auditoria.set_column(col_idx, col_idx, 12, miles_format)
+                if 'Observaciones' in columnas:
+                    col_idx = columnas.index('Observaciones')
+                    ws_auditoria.set_column(col_idx, col_idx, 20, centrado)
 
-        output.seek(0)
-        b64 = base64.b64encode(output.read()).decode()
-        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Auditoria_Completa.xlsx">📥 Descargar Excel con Auditoría</a>'
-        st.markdown(href, unsafe_allow_html=True)
+            output.seek(0)
+            b64 = base64.b64encode(output.read()).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria.xlsx">📥 Descargar Cédula de Trabajo de Auditoría</a>'
+            return href
+
+        # Simuladores para exportación (usar tus propios DataFrames en lugar de estos ejemplos)
+        df_resumen_categoria = tabla
+        df_resumen_sucursal = pd.DataFrame()  # ← Aquí debes usar el resumen final por sucursal
+        df_auditoria_sucursal = pd.DataFrame()  # ← Aquí debes usar la auditoría final por sucursal
+
+        st.markdown(generar_cedula_de_auditoria(df_resumen_categoria, df_resumen_sucursal, df_auditoria_sucursal), unsafe_allow_html=True)
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
