@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión 2 con Análisis de Riesgo Detallado
+# app.py - MiniApp Versión 2 con Análisis de Riesgo Detallado (Grupo_Riesgo después de Categoria)
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -70,8 +70,10 @@ if uploaded_file:
         orden_riesgo = {'🔴 Crítico': 0, '🟡 Moderado': 1, '🟢 Bajo': 2}
         tabla['Orden'] = tabla['Grupo_Riesgo'].map(orden_riesgo)
         tabla = tabla.sort_values(by='Orden').drop(columns='Orden')
-        columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
-        tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
+
+        # --- Reordenar columnas con Grupo_Riesgo justo después de Categoria
+        columnas_finales = ['Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total']
+        tabla = tabla.reset_index()[columnas_finales]
 
         # --- Tabla de umbrales ---
         st.markdown("---")
@@ -104,7 +106,7 @@ if uploaded_file:
         for col in columnas_monetarias:
             tabla_mostrar[col] = tabla_mostrar[col].apply(lambda x: f"RD${x:,.0f}")
 
-        st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias + ['Grupo_Riesgo']], use_container_width=True)
+        st.dataframe(tabla_mostrar, use_container_width=True)
 
         # --- Exportación con colores ---
         st.markdown("### 📥 Descargar Análisis en Excel por Nivel de Riesgo")
