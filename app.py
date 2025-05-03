@@ -105,7 +105,7 @@ if uploaded_file:
         for col in columnas_monetarias:
             tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.0f}")
 
-        tabla_final = tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
+        tabla_final = tabla_filtrada[['Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total']]
         st.dataframe(tabla_final, use_container_width=True)
 
         # --- BLOQUE DE DESCARGA FINAL ---
