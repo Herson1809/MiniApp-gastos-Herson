@@ -1,112 +1,101 @@
-# app.py - Auditoría de Gastos FarmaValue
+# app.py - MiniApp Auditoría a Gastos por País - Grupo FarmaValue
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
-import xlsxwriter
 
-st.set_page_config(page_title="Auditoría FarmaValue", layout="wide")
-
-# --- TÍTULO INSTITUCIONAL ---
+# --- TÍTULO PRINCIPAL ---
 st.markdown("""
 <h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>
 """, unsafe_allow_html=True)
 
 # --- BLOQUE 1: CARGA DE ARCHIVO ---
-st.markdown("### 📥 Sube tu archivo Excel base")
-archivo = st.file_uploader("Selecciona el archivo de gastos", type=["xlsx"])
+st.markdown("### ▶️ Sube tu archivo Excel (.xlsx)")
+archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
 
 if archivo:
     df = pd.read_excel(archivo)
-
-    # --- PROCESO DE LIMPIEZA Y CÁLCULOS ---
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Mes'] = df['Fecha'].dt.strftime('%B')
-    df['Año'] = df['Fecha'].dt.year
-    df = df[df['Año'] == 2025]  # Solo datos de 2025
 
-    # Agrupación por Categoría
-    resumen_cat = df.groupby('Categoria').agg({
-        'Monto': 'sum',
-        'Mes': lambda x: ', '.join(sorted(x.unique()))
-    }).reset_index()
+    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex([
+        'January', 'February', 'March', 'April'
+    ])
 
-    # Clasificación de Riesgo
-    def clasificar_riesgo(valor):
-        if valor >= 6000000:
+    # --- BLOQUE 2: VISUALIZACIÓN GRAFICA Y METRICAS ---
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.markdown("### 📊 Gasto por Mes")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
+        resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
+        ax.set_xlabel("Mes")
+        ax.set_ylabel("Monto")
+        ax.set_title("Gasto Mensual")
+        ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
+        ax.get_yaxis().set_visible(False)
+        st.pyplot(fig)
+
+    with col2:
+        st.markdown("### 🧾 Totales por Mes")
+        for mes, valor in resumen_mes.dropna().items():
+            st.metric(label=mes, value=f"RD${valor:,.0f}")
+        st.markdown("---")
+        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+
+    # --- BLOQUE 3: TABLA DE UMBRALES ---
+    st.markdown("---")
+    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
+    st.markdown("""
+    <table style='width:100%; text-align:center;'>
+        <tr>
+            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🔵 Bajo</th>
+        </tr>
+        <tr>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
+        </tr>
+    </table>
+    """, unsafe_allow_html=True)
+
+    # --- BLOQUE 4: ANÁLISIS POR RIESGO ---
+    st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+
+    def clasificar_riesgo(monto_total):
+        if monto_total >= 6000000:
             return "🔴 Crítico"
-        elif valor >= 3000000:
+        elif monto_total >= 3000000:
             return "🟡 Moderado"
         else:
-            return "🟢 Bajo"
+            return "🔵 Bajo"
 
-    resumen_cat['Grupo de Riesgo'] = resumen_cat['Monto'].apply(clasificar_riesgo)
+    tabla = df.copy()
+    tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
 
-    # Pivote mensual
-    resumen_pivot = pd.pivot_table(df, values='Monto', index='Categoria', columns='Mes', aggfunc='sum', fill_value=0).reset_index()
-    resumen_final = pd.merge(resumen_cat[['Categoria', 'Grupo de Riesgo']], resumen_pivot, on='Categoria', how='left')
-    resumen_final['Total general'] = resumen_final.iloc[:, 2:].sum(axis=1)
-    resumen_final = resumen_final.sort_values(by='Total general', ascending=False).reset_index(drop=True)
-    resumen_final.index += 1
-    resumen_final.insert(0, 'No', resumen_final.index)
+    resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
+    resumen['Total general'] = resumen.sum(axis=1)
+    resumen = resumen.reset_index()
+    resumen = resumen.sort_values(by='Total general', ascending=False)
 
-    # --- AUDITORÍA SUCURSALES ---
-    df['Grupo de Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
-    df['Gasto Total Sucursal'] = df.groupby('Sucursales')['Monto'].transform('sum')
-    df['% Participación'] = round((df['Monto'] / df['Gasto Total Sucursal']) * 100, 2)
-    df['Prioridad para Revisión'] = df.apply(lambda row: '✅ Sí' if (
-        row['Grupo de Riesgo'] == '🔴 Crítico' or
-        (row['Grupo de Riesgo'] == '🟢 Bajo' and row['% Participación'] >= 5)
-    ) else '🔍 No', axis=1)
+    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total general']
+    for col in columnas_monetarias:
+        if col in resumen.columns:
+            resumen[col] = resumen[col].apply(lambda x: f"RD${x:,.2f}")
 
-    auditoria_suc = df[['Sucursales', 'Grupo de Riesgo', 'Categoria', 'Descripcion', 'Fecha',
-                        'Monto', 'Gasto Total Sucursal', '% Participación', 'Prioridad para Revisión']].copy()
-    auditoria_suc = auditoria_suc.sort_values(by=['Grupo de Riesgo', '% Participación'], ascending=[True, False])
-    auditoria_suc.insert(9, 'Verificado ⬜', '')
-    auditoria_suc.insert(10, 'No Verificado ⬜', '')
-    auditoria_suc.insert(11, 'Comentario del Auditor', '')
+    st.dataframe(resumen[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
 
-    # --- EXPORTACIÓN EXCEL CON FORMATO ---
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # Hoja 1: Resumen Categoría
-        resumen_final.to_excel(writer, sheet_name='Resumen por Categoría', index=False, startrow=5)
-        ws1 = writer.sheets['Resumen por Categoría']
-        ws1.write('A1', "Auditoría grupo FarmaValue", writer.book.add_format({'bold': True, 'font_color': 'red', 'font_size': 28}))
-        ws1.write('A2', "Reporte de gastos del 01 de Enero al 20 de abril del 2025", writer.book.add_format({'font_size': 12}))
-        ws1.write('A3', "Auditor Asignado:", writer.book.add_format({'font_size': 12}))
-        ws1.write('A4', "Fecha de la Auditoría", writer.book.add_format({'font_size': 12}))
+    # --- BLOQUE 5: DESCARGA DEL ARCHIVO CÓDULA COMPLETA ---
+    st.markdown("---")
+    st.markdown("## 📄 Descargar Reporte de Auditoría Consolidado")
 
-        for col in ['January', 'February', 'March', 'April', 'Total general']:
-            if col in resumen_final.columns:
-                col_idx = resumen_final.columns.get_loc(col) + 1
-                ws1.set_column(col_idx, col_idx, 15, writer.book.add_format({'num_format': '#,##0'}))
-
-        # TOTAL GENERAL
-        row_total = 5 + len(resumen_final)
-        ws1.write(f'A{row_total + 1}', 'TOTAL GENERAL')
-        for i, col in enumerate(['January', 'February', 'March', 'April', 'Total general']):
-            col_letter = chr(67 + i)
-            ws1.write_formula(f'{col_letter}{row_total + 1}', f'SUM({col_letter}6:{col_letter}{row_total})')
-
-        # Hoja 2: Auditoría por Sucursales
-        auditoria_suc.to_excel(writer, sheet_name='Auditoría Sucursales', index=False, startrow=5)
-        ws2 = writer.sheets['Auditoría Sucursales']
-        ws2.write('A1', "Auditoría grupo FarmaValue", writer.book.add_format({'bold': True, 'font_color': 'red', 'font_size': 28}))
-        ws2.write('A2', "Reporte de gastos del 01 de Enero al 20 de abril del 2025", writer.book.add_format({'font_size': 12}))
-        ws2.write('A3', "Auditor Asignado:", writer.book.add_format({'font_size': 12}))
-        ws2.write('A4', "Fecha de la Auditoría", writer.book.add_format({'font_size': 12}))
-
-        # Formato columnas
-        ws2.set_column('E:E', 12, writer.book.add_format({'num_format': 'yyyy-mm-dd'}))
-        ws2.set_column('F:G', 18, writer.book.add_format({'num_format': '#,##0.00'}))
-        ws2.set_column('H:H', 15)
-        ws2.set_column('I:L', 20)
-
-    output.seek(0)
-    b64 = base64.b64encode(output.read()).decode()
-    href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx">📥 Descargar Cédula de Trabajo de Auditoría</a>'
-    st.markdown(href, unsafe_allow_html=True)
-
+    try:
+        with open("Cedula_Resumen_Categoria_FINAL_OK.xlsx", "rb") as f:
+            bytes_data = f.read()
+            b64 = base64.b64encode(bytes_data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_Resumen_Categoria_FINAL_OK.xlsx">📄 Descargar Cédula de Trabajo de Auditoría</a>'
+            st.markdown(href, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error("❌ El archivo 'Cedula_Resumen_Categoria_FINAL_OK.xlsx' no fue encontrado. Asegúrate de subirlo al entorno del proyecto.")
 else:
-    st.warning("🔺 Sube un archivo para generar los reportes.")
+    st.info("📅 Sube un archivo Excel para comenzar.")
