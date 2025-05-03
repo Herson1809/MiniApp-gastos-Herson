@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión Final con Gráfica Original, Bloques Completos y Descarga de Reportes
+# app.py - MiniApp Final con descarga de Cédula de Auditoría
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -55,7 +55,7 @@ if uploaded_file:
 
         # BLOQUE 2: Tabla de Umbrales de Riesgo y Análisis por Nivel de Riesgo
         st.markdown("---")
-        st.markdown("## 🗆 Tabla de Umbrales de Riesgo")
+        st.markdown("## 🛆 Tabla de Umbrales de Riesgo")
         st.markdown("""
         <table style='width:100%; text-align:center;'>
           <tr>
@@ -108,15 +108,15 @@ if uploaded_file:
         tabla_final = tabla_filtrada[['Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total']]
         st.dataframe(tabla_final, use_container_width=True)
 
-        # --- BLOQUE DE DESCARGA FINAL ---
+        # BLOQUE 3: Descarga del Reporte Final Consolidado
         st.markdown("---")
-        st.markdown("## 📄 Descargar Cédula de Trabajo de Auditoría")
+        st.markdown("## 📤 Descargar Reporte de Auditoría Consolidado")
 
         with open("Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx", "rb") as f:
             data = f.read()
             b64 = base64.b64encode(data).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria.xlsx">📄 Descargar Cédula de Trabajo de Auditoría</a>'
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx">📄 Descargar Cédula de Trabajo de Auditoría</a>'
             st.markdown(href, unsafe_allow_html=True)
 
 else:
-    st.info("📅 Sube un archivo Excel para comenzar.")
+    st.info("📥 Sube un archivo Excel para comenzar.")
