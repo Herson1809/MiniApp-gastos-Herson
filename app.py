@@ -7,7 +7,7 @@ import xlsxwriter
 
 # --- Título Principal ---
 st.markdown("""
-<h1 style='text-align: center; color: white;'>Dashboard de Gastos Regional Grupo FarmaValue - Herson Hernández</h1>
+<h1 style='text-align: center; color: white;'>Dashboard de Gastos Regional - Herson Hernández</h1>
 """, unsafe_allow_html=True)
 
 # --- Carga del archivo Excel ---
@@ -26,6 +26,7 @@ if uploaded_file:
         df['Fecha'] = pd.to_datetime(df['Fecha'])
         df['Mes'] = df['Fecha'].dt.strftime('%B')
 
+        # --- Clasificación de riesgo ---
         def clasificar_riesgo(monto):
             if monto >= 6000000:
                 return "🔴 Crítico"
@@ -35,6 +36,25 @@ if uploaded_file:
                 return "🟢 Bajo"
 
         df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+
+        # --- Gráfico mensual ---
+        resumen_mes = df.groupby('Mes')['Monto'].sum().reindex(
+            ['January', 'February', 'March', 'April', 'May', 'June',
+             'July', 'August', 'September', 'October', 'November', 'December']
+        )
+        st.markdown("## 📊 Gasto por Mes")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        resumen_mes.dropna().plot(kind='bar', ax=ax, color=['#3498db'])
+        ax.set_title("Gasto Mensual")
+        ax.set_xlabel("Mes")
+        ax.set_ylabel("Monto")
+        ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
+        st.pyplot(fig)
+
+        st.markdown("### 📋 Totales por Mes")
+        for mes, valor in resumen_mes.dropna().items():
+            st.metric(label=mes, value=f"RD${valor:,.0f}")
+        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
         # --- Tabla de umbrales ---
         st.markdown("## 🛆 Tabla de Umbrales de Riesgo")
@@ -49,21 +69,44 @@ if uploaded_file:
         </table>
         """, unsafe_allow_html=True)
 
-        # --- Resumen por Categoría ---
+        # --- Tabla principal por riesgo ---
+        tabla = pd.pivot_table(df, index='Categoria', columns='Mes',
+                               values='Monto', aggfunc='sum', fill_value=0)
+        tabla['Total'] = tabla.sum(axis=1)
+        tabla['Grupo_Riesgo'] = tabla['Total'].apply(clasificar_riesgo)
+        orden_riesgo = {'🔴 Crítico': 0, '🟡 Moderado': 1, '🟢 Bajo': 2}
+        tabla['Orden'] = tabla['Grupo_Riesgo'].map(orden_riesgo)
+        tabla = tabla.sort_values(by='Orden').drop(columns='Orden')
+        tabla = tabla.reset_index()
+
+        st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+        opciones = ['Ver Todos'] + sorted(tabla['Grupo_Riesgo'].unique())
+        riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+
+        if riesgo_opcion == 'Ver Todos':
+            tabla_filtrada = tabla
+        else:
+            tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
+
+        mostrar = tabla_filtrada.copy()
+        columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
+        for col in columnas_monetarias:
+            mostrar[col] = mostrar[col].apply(lambda x: f"RD${x:,.0f}")
+        st.dataframe(mostrar[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
+
+        # --- Cálculos para exportación ---
         resumen_categoria = df.groupby(['Categoria', 'Grupo_Riesgo'])['Monto'].sum().reset_index()
         resumen_categoria['Total (Miles)'] = resumen_categoria['Monto'] / 1000
         resumen_categoria = resumen_categoria.drop(columns=['Monto'])
         resumen_categoria = resumen_categoria.sort_values(by='Total (Miles)', ascending=False)
         resumen_categoria.insert(0, 'No.', range(1, len(resumen_categoria) + 1))
 
-        # --- Resumen por Sucursal ---
         resumen_sucursal = df.groupby(['Sucursales', 'Grupo_Riesgo'])['Monto'].agg(['sum', 'count']).reset_index()
         resumen_sucursal['Total (Miles)'] = resumen_sucursal['sum'] / 1000
         resumen_sucursal = resumen_sucursal.drop(columns=['sum'])
         resumen_sucursal = resumen_sucursal.rename(columns={'count': 'Cantidad'})
         resumen_sucursal = resumen_sucursal.sort_values(by='Total (Miles)', ascending=False)
 
-        # --- Auditoría por Sucursal ---
         def marcar_revision(desc):
             desc = str(desc).lower()
             if len(desc) < 15 or any(x in desc for x in ['varios', 'otros', 'misc']):
@@ -77,7 +120,7 @@ if uploaded_file:
         auditoria = auditoria.drop(columns='Monto')
         auditoria = auditoria.sort_values(by='% Participación', ascending=False)
 
-        # --- Descargar Excel con Encabezado Institucional ---
+        # --- Exportación Excel ---
         st.markdown("### 📥 Descargar Cédula de Trabajo de Auditoría")
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -87,7 +130,6 @@ if uploaded_file:
                 'verde': wb.add_format({'bg_color': '#C6EFCE'}),
                 'grande_rojo': wb.add_format({'font_size': 28, 'bold': True, 'font_color': 'red'}),
                 'mediano': wb.add_format({'font_size': 12, 'bold': False, 'font_color': 'black'}),
-                'centrado': wb.add_format({'align': 'center'})
             }
 
             def escribir_hoja(df, nombre, writer):
