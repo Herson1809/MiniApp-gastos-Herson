@@ -81,12 +81,25 @@ if archivo:
     riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
 
     if riesgo_opcion == 'Ver Todos':
-        tabla_filtrada = resumen
+        tabla_filtrada = resumen.copy()
     else:
-        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion]
+        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion].copy()
+
+    # --- Agregar fila de Total general (solo visual, no afecta archivo Excel) ---
+    total_row = {
+        'No': '',
+        'Categoria': 'TOTAL GENERAL',
+        'Grupo_Riesgo': '',
+        'January': tabla_filtrada['January'].sum(),
+        'February': tabla_filtrada['February'].sum(),
+        'March': tabla_filtrada['March'].sum(),
+        'April': tabla_filtrada['April'].sum(),
+        'Total general': tabla_filtrada['Total general'].sum()
+    }
+    tabla_filtrada = pd.concat([tabla_filtrada, pd.DataFrame([total_row])], ignore_index=True)
 
     for col in ['January', 'February', 'March', 'April', 'Total general']:
-        tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"{x:,.2f}")
+        tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) and isinstance(x, (int, float)) else x)
 
     st.dataframe(tabla_filtrada[['No', 'Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total general']], use_container_width=True)
 
@@ -106,7 +119,6 @@ if archivo:
         ws.write('A3', 'Auditor Asignado:', wb.add_format({'font_size': 12}))
         ws.write('A4', 'Fecha de la Auditoría', wb.add_format({'font_size': 12}))
 
-        # Contenido desde fila 6
         resumen_final = resumen[['No', 'Categoria', 'Grupo_Riesgo', 'January', 'February', 'March', 'April', 'Total general']]
         resumen_final.to_excel(writer, sheet_name='Resumen por Categoría', startrow=5, index=False)
 
