@@ -31,6 +31,27 @@ if uploaded_file:
              'August', 'September', 'October', 'November', 'December']
         )
 
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            st.markdown("### 📊 Gasto por Mes")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
+            resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
+            ax.set_xlabel("Mes")
+            ax.set_ylabel("Monto")
+            ax.set_title("Gasto Mensual")
+            ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
+            ax.get_yaxis().set_visible(False)
+            st.pyplot(fig)
+
+        with col2:
+            st.markdown("### 📋 Totales por Mes")
+            for mes, valor in resumen_mes.dropna().items():
+                st.metric(label=mes, value=f"RD${valor:,.0f}")
+            st.divider()
+            st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+
         def clasificar_riesgo(monto_total):
             if monto_total >= 6000000:
                 return "🔴 Crítico"
@@ -81,7 +102,7 @@ if uploaded_file:
         auditoria_sucursal = df[columnas_exportar]
         auditoria_sucursal = auditoria_sucursal.sort_values(by='% Participacion', ascending=False)
 
-        # --- Exportación final ---
+        # --- Exportación final (AL FINAL DEL FLUJO) ---
         st.markdown("### 📤 Descargar Cédula de Trabajo de Auditoría")
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
