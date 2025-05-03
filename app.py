@@ -23,7 +23,7 @@ if archivo:
         'January', 'February', 'March', 'April'
     ])
 
-    # --- BLOQUE 2: VISUALIZACIÓN GRAFICA Y METRICAS ---
+    # --- BLOQUE 2: VISUALIZACIÓN GRÁFICA Y MÉTRICAS ---
     col1, col2 = st.columns([2, 1])
 
     with col1:
@@ -41,13 +41,13 @@ if archivo:
     with col2:
         st.markdown("### 🧾 Totales por Mes")
         for mes, valor in resumen_mes.dropna().items():
-            st.metric(label=mes, value=f"RD${valor:,.0f}")
+            st.metric(label=mes, value=f"RD${valor:,.2f}")
         st.markdown("---")
-        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.2f}")
 
     # --- BLOQUE 3: TABLA DE UMBRALES ---
     st.markdown("---")
-    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
+    st.markdown("## 🚩 Tabla de Umbrales de Riesgo")
     st.markdown("""
     <table style='width:100%; text-align:center;'>
         <tr>
@@ -74,20 +74,27 @@ if archivo:
     tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
 
     resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
-    resumen['Total general'] = resumen.sum(axis=1)
+    resumen['Total'] = resumen.sum(axis=1)
     resumen = resumen.reset_index()
-    resumen = resumen.sort_values(by='Total general', ascending=False)
 
-    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total general']
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
+    riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+
+    if riesgo_opcion == 'Ver Todos':
+        tabla_filtrada = resumen
+    else:
+        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion]
+
+    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
     for col in columnas_monetarias:
-        if col in resumen.columns:
-            resumen[col] = resumen[col].apply(lambda x: f"RD${x:,.2f}")
+        if col in tabla_filtrada.columns:
+            tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.2f}")
 
-    st.dataframe(resumen[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
+    st.dataframe(tabla_filtrada[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
 
-    # --- BLOQUE 5: DESCARGA DEL ARCHIVO CÓDULA COMPLETA ---
+    # --- BLOQUE 5: DESCARGA DEL REPORTE FINAL ---
     st.markdown("---")
-    st.markdown("## 📄 Descargar Reporte de Auditoría Consolidado")
+    st.markdown("## 🧾 Descargar Reporte de Auditoría Consolidado")
 
     try:
         with open("Cedula_Resumen_Categoria_FINAL_OK.xlsx", "rb") as f:
@@ -97,5 +104,6 @@ if archivo:
             st.markdown(href, unsafe_allow_html=True)
     except FileNotFoundError:
         st.error("❌ El archivo 'Cedula_Resumen_Categoria_FINAL_OK.xlsx' no fue encontrado. Asegúrate de subirlo al entorno del proyecto.")
+
 else:
-    st.info("📅 Sube un archivo Excel para comenzar.")
+    st.info("📥 Sube un archivo Excel para comenzar.")
