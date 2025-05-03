@@ -31,27 +31,6 @@ if uploaded_file:
              'August', 'September', 'October', 'November', 'December']
         )
 
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            st.markdown("### 📊 Gasto por Mes")
-            fig, ax = plt.subplots(figsize=(6, 4))
-            colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
-            resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
-            ax.set_xlabel("Mes")
-            ax.set_ylabel("Monto")
-            ax.set_title("Gasto Mensual")
-            ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
-            ax.get_yaxis().set_visible(False)
-            st.pyplot(fig)
-
-        with col2:
-            st.markdown("### 📋 Totales por Mes")
-            for mes, valor in resumen_mes.dropna().items():
-                st.metric(label=mes, value=f"RD${valor:,.0f}")
-            st.divider()
-            st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
-
         def clasificar_riesgo(monto_total):
             if monto_total >= 6000000:
                 return "🔴 Crítico"
@@ -70,83 +49,76 @@ if uploaded_file:
         columnas_ordenadas = ['January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']
         tabla = tabla.reset_index()[['Categoria'] + columnas_ordenadas]
 
-        st.markdown("---")
-        st.markdown("## 🛆 Tabla de Umbrales de Riesgo")
-        st.markdown("""
-        <table style='width:100%; text-align:center;'>
-          <tr>
-            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
-          </tr>
-          <tr>
-            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
-          </tr>
-        </table>
-        """, unsafe_allow_html=True)
+        # --- Generar Resumen por Sucursal ---
+        resumen_sucursal = df.groupby(['Sucursales', 'Categoria'])['Monto'].agg(['sum', 'count']).reset_index()
+        resumen_sucursal.rename(columns={'sum': 'Total_Gasto', 'count': 'Cantidad_Registros'}, inplace=True)
+        resumen_sucursal['Total_Sucursal'] = resumen_sucursal.groupby('Sucursales')['Total_Gasto'].transform('sum')
+        resumen_sucursal['% Participacion'] = (resumen_sucursal['Total_Gasto'] / resumen_sucursal['Total_Sucursal']) * 100
+        resumen_sucursal['% Participacion'] = resumen_sucursal['% Participacion'].round(2)
+        resumen_sucursal['Total_Gasto'] = (resumen_sucursal['Total_Gasto'] / 1000).round(0).astype(int)
+        resumen_sucursal['Total_Sucursal'] = (resumen_sucursal['Total_Sucursal'] / 1000).round(0).astype(int)
 
-        st.markdown("---")
-        st.markdown("## 🔍 Análisis por Nivel de Riesgo")
-        opciones = ['Ver Todos'] + sorted(tabla['Grupo_Riesgo'].unique())
-        riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+        # --- Auditoría por Sucursal con Revisión ---
+        def marcar_revision_experta(desc, riesgo):
+            desc = str(desc).lower()
+            if riesgo in ['🔴 Crítico', '🟡 Moderado']:
+                return '✅ Sí'
+            if riesgo == '🟢 Bajo':
+                claves = ['efectivo', 'reembolso', 'personal', 'varios', 'sin detalle', 'caja chica', 'gasto menor', 'otros']
+                if any(p in desc for p in claves):
+                    return '✅ Sí'
+            return '❌ No'
 
-        if riesgo_opcion == 'Ver Todos':
-            tabla_filtrada = tabla
-        else:
-            tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == riesgo_opcion]
+        df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+        df['¿Revisar?'] = df.apply(lambda x: marcar_revision_experta(x['Descripcion'], x['Grupo_Riesgo']), axis=1)
+        df['Total_Sucursal'] = df.groupby('Sucursales')['Monto'].transform('sum')
+        df['% Participacion'] = round((df['Monto'] / df['Total_Sucursal']) * 100, 2)
+        df['Monto'] = (df['Monto'] / 1000).round(0).astype(int)
+        df['Total_Sucursal'] = (df['Total_Sucursal'] / 1000).round(0).astype(int)
 
-        tabla_mostrar = tabla_filtrada.copy()
-        columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
-        for col in columnas_monetarias:
-            tabla_mostrar[col] = tabla_mostrar[col].apply(lambda x: f"RD${x:,.0f}")
+        columnas_exportar = ['Categoria', 'Sucursales', 'Fecha', 'Descripcion', 'Monto', 'Total_Sucursal', '% Participacion', 'Grupo_Riesgo', '¿Revisar?', 'Observaciones']
+        df['Observaciones'] = ''
+        auditoria_sucursal = df[columnas_exportar]
+        auditoria_sucursal = auditoria_sucursal.sort_values(by='% Participacion', ascending=False)
 
-        st.dataframe(tabla_mostrar[['Categoria'] + columnas_monetarias + ['Grupo_Riesgo']], use_container_width=True)
-
-        # EXPORTACIÓN CÉDULA DE TRABAJO
+        # --- Exportación final ---
         st.markdown("### 📤 Descargar Cédula de Trabajo de Auditoría")
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            tabla.to_excel(writer, sheet_name="Resumen por Categoría", startrow=6, index=False)
+            resumen_sucursal.to_excel(writer, sheet_name="Resumen por Sucursal", startrow=6, index=False)
+            auditoria_sucursal.to_excel(writer, sheet_name="Auditoría por Sucursal", startrow=6, index=False)
 
-        def generar_cedula_de_auditoria(df_resumen_categoria, df_resumen_sucursal, df_auditoria_sucursal):
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_resumen_categoria.to_excel(writer, sheet_name="Resumen por Categoría", startrow=6, index=False)
-                df_resumen_sucursal.to_excel(writer, sheet_name="Resumen por Sucursal", startrow=6, index=False)
-                df_auditoria_sucursal.to_excel(writer, sheet_name="Auditoría Sucursales", startrow=6, index=False)
+            wb = writer.book
+            h = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+            s = wb.add_format({'font_size': 12})
+            l = wb.add_format({'bold': True, 'font_size': 12})
+            miles_format = wb.add_format({'num_format': '#,##0'})
+            centrado = wb.add_format({'align': 'center'})
 
-                wb = writer.book
-                h = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
-                s = wb.add_format({'font_size': 12})
-                l = wb.add_format({'bold': True, 'font_size': 12})
-                miles_format = wb.add_format({'num_format': '#,##0'})
-                centrado = wb.add_format({'align': 'center'})
+            for hoja in ["Resumen por Categoría", "Resumen por Sucursal", "Auditoría por Sucursal"]:
+                ws = writer.sheets[hoja]
+                ws.write("A1", "Auditoría grupo Farmavalue", h)
+                ws.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", s)
+                ws.write("A3", "Auditor Asignado:", l)
+                ws.write("A4", "Fecha de la Auditoría:", l)
 
-                for hoja in ["Resumen por Categoría", "Resumen por Sucursal", "Auditoría Sucursales"]:
-                    ws = writer.sheets[hoja]
-                    ws.write("A1", "Auditoría grupo Farmavalue", h)
-                    ws.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", s)
-                    ws.write("A3", "Auditor Asignado:", l)
-                    ws.write("A4", "Fecha de la Auditoría:", l)
+            ws_auditoria = writer.sheets['Auditoría por Sucursal']
+            colnames = auditoria_sucursal.columns.tolist()
+            if 'Monto' in colnames:
+                idx = colnames.index('Monto')
+                ws_auditoria.set_column(idx, idx, 12, miles_format)
+            if 'Total_Sucursal' in colnames:
+                idx = colnames.index('Total_Sucursal')
+                ws_auditoria.set_column(idx, idx, 12, miles_format)
+            if 'Observaciones' in colnames:
+                idx = colnames.index('Observaciones')
+                ws_auditoria.set_column(idx, idx, 20, centrado)
 
-                ws_auditoria = writer.sheets["Auditoría Sucursales"]
-                columnas = df_auditoria_sucursal.columns.tolist()
-                if 'Monto' in columnas:
-                    col_idx = columnas.index('Monto')
-                    ws_auditoria.set_column(col_idx, col_idx, 12, miles_format)
-                if 'Total_Sucursal' in columnas:
-                    col_idx = columnas.index('Total_Sucursal')
-                    ws_auditoria.set_column(col_idx, col_idx, 12, miles_format)
-                if 'Observaciones' in columnas:
-                    col_idx = columnas.index('Observaciones')
-                    ws_auditoria.set_column(col_idx, col_idx, 20, centrado)
-
-            output.seek(0)
-            b64 = base64.b64encode(output.read()).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria.xlsx">📥 Descargar Cédula de Trabajo de Auditoría</a>'
-            return href
-
-        # Simuladores para exportación (usar tus propios DataFrames en lugar de estos ejemplos)
-        df_resumen_categoria = tabla
-        df_resumen_sucursal = pd.DataFrame()  # ← Aquí debes usar el resumen final por sucursal
-        df_auditoria_sucursal = pd.DataFrame()  # ← Aquí debes usar la auditoría final por sucursal
-
-        st.markdown(generar_cedula_de_auditoria(df_resumen_categoria, df_resumen_sucursal, df_auditoria_sucursal), unsafe_allow_html=True)
+        output.seek(0)
+        b64 = base64.b64encode(output.read()).decode()
+        href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria.xlsx">📥 Descargar Cédula de Trabajo de Auditoría</a>'
+        st.markdown(href, unsafe_allow_html=True)
 
 else:
     st.info("📥 Sube un archivo Excel para comenzar.")
