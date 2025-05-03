@@ -1,4 +1,4 @@
-# app.py - MiniApp Versión Final con Gráfica Original y Exportación Correcta
+# app.py - MiniApp Versión Final con Gráfica Original, Bloques Completos y Descarga de Reportes
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ import xlsxwriter
 
 # --- 1. Título Principal ---
 st.markdown("""
-<h1 style='text-align: center; color: white;'>Dashboard Auditoria de Gastos Regional Grupo FarmaValue - Herson Hernández</h1>
+<h1 style='text-align: center; color: white;'>Dashboard de Gastos Regional - Herson Hernández</h1>
 """, unsafe_allow_html=True)
 
 # --- 2. Carga de archivo Excel ---
@@ -53,14 +53,70 @@ if uploaded_file:
             st.divider()
             st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-        # Acá seguiría el resto del análisis, tablas, exportaciones, etc.
-        # Lo mantendremos modular para que se pegue al resto de tu app correctamente.
-
-        # --- Bloque de descarga del Excel (provisional si ya se ha generado anteriormente) ---
+        # BLOQUE 2: Tabla de Umbrales de Riesgo y Análisis por Nivel de Riesgo
+        st.markdown("---")
+        st.markdown("## 🗆 Tabla de Umbrales de Riesgo")
         st.markdown("""
-        ### 📄 Descargar Cédula de Trabajo de Auditoría
-        <a href="Cedula_de_Trabajo_de_Auditoria.xlsx" download="Cedula_de_Trabajo_de_Auditoria.xlsx"> 📄 Descargar Cédula de Trabajo de Auditoría</a>
+        <table style='width:100%; text-align:center;'>
+          <tr>
+            <th style='color:red;'>🔴 Crítico</th>
+            <th style='color:orange;'>🟡 Moderado</th>
+            <th style='color:green;'>🟢 Bajo</th>
+          </tr>
+          <tr>
+            <td>≥ RD$6,000,000</td>
+            <td>≥ RD$3,000,000 y &lt; RD$6,000,000</td>
+            <td>&lt; RD$3,000,000</td>
+          </tr>
+        </table>
         """, unsafe_allow_html=True)
+
+        def clasificar_riesgo(monto):
+            if monto >= 6000000:
+                return '🔴 Crítico'
+            elif monto >= 3000000:
+                return '🟡 Moderado'
+            else:
+                return '🟢 Bajo'
+
+        tabla = df.groupby('Categoria')['Monto'].sum().reset_index()
+        tabla['Grupo_Riesgo'] = tabla['Monto'].apply(clasificar_riesgo)
+
+        for mes in ['January', 'February', 'March', 'April']:
+            df_mes = df[df['Mes'] == mes]
+            tabla_mes = df_mes.groupby('Categoria')['Monto'].sum()
+            tabla[mes] = tabla['Categoria'].map(tabla_mes).fillna(0)
+
+        tabla['Total'] = tabla[['January', 'February', 'March', 'April']].sum(axis=1)
+        orden_riesgo = {'🔴 Crítico': 0, '🟡 Moderado': 1, '🟢 Bajo': 2}
+        tabla['Orden'] = tabla['Grupo_Riesgo'].map(orden_riesgo)
+        tabla = tabla.sort_values(by=['Orden', 'Total'], ascending=[True, False])
+
+        st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+        opciones_riesgo = ['Ver Todos'] + sorted(tabla['Grupo_Riesgo'].unique())
+        seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones_riesgo)
+
+        if seleccion == 'Ver Todos':
+            tabla_filtrada = tabla.copy()
+        else:
+            tabla_filtrada = tabla[tabla['Grupo_Riesgo'] == seleccion].copy()
+
+        columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
+        for col in columnas_monetarias:
+            tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.0f}")
+
+        tabla_final = tabla_filtrada[['Categoria', 'January', 'February', 'March', 'April', 'Total', 'Grupo_Riesgo']]
+        st.dataframe(tabla_final, use_container_width=True)
+
+        # --- BLOQUE DE DESCARGA FINAL ---
+        st.markdown("---")
+        st.markdown("## 📄 Descargar Cédula de Trabajo de Auditoría")
+
+        with open("Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx", "rb") as f:
+            data = f.read()
+            b64 = base64.b64encode(data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria.xlsx">📄 Descargar Cédula de Trabajo de Auditoría</a>'
+            st.markdown(href, unsafe_allow_html=True)
 
 else:
     st.info("📅 Sube un archivo Excel para comenzar.")
