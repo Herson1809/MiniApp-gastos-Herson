@@ -1,6 +1,7 @@
 # app.py - MiniApp Auditoría a Gastos por País - Grupo FarmaValue
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
 
@@ -15,61 +16,94 @@ archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
 
 if archivo:
     df = pd.read_excel(archivo)
-
-    # --- BLOQUE 2: CONSTRUCCIÓN DE LA HOJA RESUMEN POR CATEGORÍA ---
-    st.markdown("## 📊 Resumen por Categoría (en miles)")
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Mes'] = df['Fecha'].dt.strftime('%B')
 
-    categorias = df.groupby(['Categoria'])['Monto'].sum().sort_values(ascending=False).reset_index()
-    categorias['Monto'] = categorias['Monto'] / 1000
+    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex([
+        'January', 'February', 'March', 'April'
+    ])
 
-    # Cálculo por mes y total
-    pivot = pd.pivot_table(df, values='Monto', index=['Categoria', 'Grupo de Riesgo'],
-                           columns='Mes', aggfunc='sum', fill_value=0)
-    pivot = pivot[['January', 'February', 'March', 'April']]  # mantener orden
-    pivot = pivot / 1000  # convertir a miles
-    pivot['Total general'] = pivot.sum(axis=1)
+    # --- BLOQUE 2: VISUALIZACIÓN GRAFICA Y METRICAS ---
+    col1, col2 = st.columns([2, 1])
 
-    pivot = pivot.reset_index()
-    pivot.index += 1
-    pivot.index.name = 'No'
+    with col1:
+        st.markdown("### 📊 Gasto por Mes")
+        fig, ax = plt.subplots(figsize=(6, 4))
+        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
+        resumen_mes.dropna().plot(kind='bar', ax=ax, color=colores)
+        ax.set_xlabel("Mes")
+        ax.set_ylabel("Monto")
+        ax.set_title("Gasto Mensual")
+        ax.set_xticklabels(resumen_mes.dropna().index, rotation=0)
+        ax.get_yaxis().set_visible(False)
+        st.pyplot(fig)
 
-    # Calcular totales por columna
-    total_row = ['TOTAL GENERAL', '', *pivot[['January', 'February', 'March', 'April', 'Total general']].sum().round(0)]
-    df_final = pd.concat([pivot, pd.DataFrame([total_row], columns=pivot.columns)], ignore_index=True)
+    with col2:
+        st.markdown("### 🧾 Totales por Mes")
+        for mes, valor in resumen_mes.dropna().items():
+            st.metric(label=mes, value=f"RD${valor:,.0f}")
+        st.markdown("---")
+        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # Mostrar en pantalla
-    st.dataframe(df_final)
-
-    # --- BLOQUE 3: DESCARGA DE ARCHIVO FINAL ---
-    st.markdown("## 📥 Descargar Reporte de Auditoría Consolidado")
-
-    def to_excel(df):
-        output = BytesIO()
-        writer = pd.ExcelWriter(output, engine='xlsxwriter')
-        df.to_excel(writer, index=False, sheet_name='Resumen por Categoría', startrow=4)
-
-        # Encabezado institucional
-        workbook = writer.book
-        worksheet = writer.sheets['Resumen por Categoría']
-        bold = workbook.add_format({'bold': True})
-        red_bold = workbook.add_format({'bold': True, 'font_color': 'red', 'font_size': 16})
-        normal = workbook.add_format({'font_size': 12})
-
-        worksheet.merge_range('A1:G1', 'Auditoría grupo Farmavalue', red_bold)
-        worksheet.write('A2', 'Reporte de gastos del 01 de Enero al 20 de abril del 2025', normal)
-        worksheet.write('A3', 'Auditor Asignado:', bold)
-        worksheet.write('A4', 'Fecha de la Auditoría:', bold)
-
-        writer.close()
-        processed_data = output.getvalue()
-        return processed_data
-
-    excel_data = to_excel(df_final)
-    b64 = base64.b64encode(excel_data).decode()
-    st.markdown(f"""
-    <a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx">
-        📄 Descargar Cédula de Trabajo de Auditoría
-    </a>
+    # --- BLOQUE 3: TABLA DE UMBRALES ---
+    st.markdown("---")
+    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
+    st.markdown("""
+    <table style='width:100%; text-align:center;'>
+        <tr>
+            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th>
+        </tr>
+        <tr>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
+        </tr>
+    </table>
     """, unsafe_allow_html=True)
+
+    # --- BLOQUE 4: ANÁLISIS POR RIESGO ---
+    st.markdown("## 🔍 Análisis por Nivel de Riesgo")
+
+    def clasificar_riesgo(monto_total):
+        if monto_total >= 6000000:
+            return "🔴 Crítico"
+        elif monto_total >= 3000000:
+            return "🟡 Moderado"
+        else:
+            return "🟢 Bajo"
+
+    tabla = df.copy()
+    tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+
+    resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
+    resumen['Total'] = resumen.sum(axis=1)
+    resumen = resumen.reset_index()
+
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
+    riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+
+    if riesgo_opcion == 'Ver Todos':
+        tabla_filtrada = resumen
+    else:
+        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion]
+
+    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
+    for col in columnas_monetarias:
+        if col in tabla_filtrada.columns:
+            tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.0f}")
+
+    st.dataframe(tabla_filtrada[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
+
+    # --- BLOQUE 5: DESCARGA DE ARCHIVO VALIDADO ---
+    st.markdown("---")
+    st.markdown("## 📥 Descargar Reporte Validado")
+
+    try:
+        with open("Cedula_Resumen_Categoria_FINAL_OK.xlsx", "rb") as file:
+            bytes_data = file.read()
+            b64 = base64.b64encode(bytes_data).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_Resumen_Categoria_FINAL_OK.xlsx">📄 Descargar Cedula de Trabajo Final</a>'
+            st.markdown(href, unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.error("❌ El archivo 'Cedula_Resumen_Categoria_FINAL_OK.xlsx' no fue encontrado en el entorno del proyecto.")
+
+else:
+    st.info("📥 Sube un archivo Excel para comenzar.")
