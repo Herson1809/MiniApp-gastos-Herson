@@ -1,99 +1,83 @@
-# app.py - Version_80_App_Auditoria_Gastos_FarmaValue
+# app_version_80_por_ciento.py
 import streamlit as st
 import pandas as pd
-import base64
+import numpy as np
+import plotly.express as px
 from io import BytesIO
+from datetime import datetime
 
-# --- TÍTULO PRINCIPAL ---
-st.markdown("""
-<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>
-""", unsafe_allow_html=True)
+# Configuración inicial
+st.set_page_config(page_title="Auditoría a Gastos - Grupo FarmaValue", layout="wide")
 
-# --- BLOQUE 1: CARGA DE ARCHIVO ---
-st.markdown("### ▶️ Sube tu archivo Excel (.xlsx)")
-archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
+# Título principal
+st.markdown("<h1 style='text-align: center;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
 
-if archivo:
-    df = pd.read_excel(archivo)
-    df['Fecha'] = pd.to_datetime(df['Fecha'])
-    df['Mes'] = df['Fecha'].dt.strftime('%B')
+# Subir archivo base
+st.subheader("📥 Sube tu archivo Excel base")
+archivo_excel = st.file_uploader("Selecciona el archivo de gastos", type=["xlsx"])
 
-    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex([
-        'January', 'February', 'March', 'April'
-    ])
+if archivo_excel:
+    df = pd.read_excel(archivo_excel)
 
-    # --- BLOQUE 2: VISUALIZACIÓN GRAFICA Y METRICAS ---
-    col1, col2 = st.columns([2, 1])
+    # Procesamiento inicial
+    df.columns = df.columns.str.strip()
+    df["Fecha"] = pd.to_datetime(df["Fecha"])
+    df["Mes"] = df["Fecha"].dt.month
+    df["Nombre_Mes"] = df["Fecha"].dt.strftime('%B')
+    meses_ordenados = ['Enero', 'Febrero', 'Marzo', 'Abril']
+    df["Nombre_Mes"] = pd.Categorical(df["Nombre_Mes"], categories=meses_ordenados, ordered=True)
 
-    with col1:
-        st.markdown("### 📊 Gasto por Mes")
-        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
-        fig = pd.DataFrame({'Mes': resumen_mes.index, 'Monto': resumen_mes.values})
-        st.bar_chart(fig.set_index('Mes'))
+    # Gráfico mensual
+    st.subheader("📊 Gasto mensual por categoría")
+    gasto_mensual = df.groupby(["Nombre_Mes"])["Monto"].sum().reindex(meses_ordenados)
+    fig = px.bar(gasto_mensual, x=gasto_mensual.index, y=gasto_mensual.values,
+                 labels={"x": "Mes", "y": "Monto"}, text_auto=True)
+    st.plotly_chart(fig, use_container_width=True)
 
-    with col2:
-        st.markdown("### 🧼 Totales por Mes")
-        for mes, valor in resumen_mes.dropna().items():
-            st.metric(label=mes, value=f"RD${valor:,.0f}")
-        st.markdown("---")
-        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
-
-    # --- BLOQUE 3: TABLA DE UMBRALES ---
-    st.markdown("---")
+    # Tabla de umbrales
     st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
     st.markdown("""
     <table style='width:100%; text-align:center;'>
         <tr>
-            <th>🔴 Crítico</th><th>🟡 Moderado</th><th>🔵 Bajo</th>
+            <th style="color:red;">🔴 Crítico</th><th style="color:orange;">🟡 Moderado</th><th style="color:green;">🟢 Bajo</th>
         </tr>
         <tr>
-            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td>
+            <td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y &lt; RD$6,000,000</td><td>&lt; RD$3,000,000</td>
         </tr>
     </table>
     """, unsafe_allow_html=True)
 
-    # --- BLOQUE 4: FILTRO POR RIESGO ---
-    def clasificar_riesgo(monto_total):
-        if monto_total >= 6000000:
+    # Clasificación de riesgo
+    def clasificar_riesgo(monto):
+        if monto >= 6000000:
             return "🔴 Crítico"
-        elif monto_total >= 3000000:
+        elif monto >= 3000000:
             return "🟡 Moderado"
         else:
-            return "🔵 Bajo"
+            return "🟢 Bajo"
 
-    tabla = df.copy()
-    tabla['Grupo_Riesgo'] = tabla.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+    df["Grupo de Riesgo"] = df.groupby("Categoria")["Monto"].transform("sum").apply(clasificar_riesgo)
 
-    resumen = pd.pivot_table(tabla, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0)
-    resumen['Total'] = resumen.sum(axis=1)
+    # Resumen por categoría
+    resumen = df.groupby(["Categoria", "Grupo de Riesgo", "Nombre_Mes"])["Monto"].sum().unstack(fill_value=0)
+    resumen = resumen[meses_ordenados]
+    resumen["Total general"] = resumen.sum(axis=1)
     resumen = resumen.reset_index()
+    resumen.insert(0, "No", range(1, len(resumen) + 1))
+    resumen[meses_ordenados + ["Total general"]] = resumen[meses_ordenados + ["Total general"]].applymap(lambda x: round(x / 1000, 2))
 
+    resumen = resumen.rename(columns={"Categoria": "Categoría"})
+
+    # Agregar total general
+    total_row = ["", "TOTAL", ""] + [resumen[col].sum() if col != "Grupo de Riesgo" else "" for col in resumen.columns[3:]]
+    resumen.loc[len(resumen)] = total_row
+
+    # Filtro por nivel de riesgo
     st.markdown("## 🔍 Análisis por Nivel de Riesgo")
-    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
-    riesgo_opcion = st.selectbox("Selecciona un grupo de riesgo:", options=opciones)
+    opciones = ['Ver Todos'] + sorted(resumen["Grupo de Riesgo"].dropna().unique())
+    seleccion = st.selectbox("Selecciona un nivel de riesgo:", opciones)
 
-    if riesgo_opcion == 'Ver Todos':
-        tabla_filtrada = resumen
+    if seleccion == 'Ver Todos':
+        st.dataframe(resumen, use_container_width=True)
     else:
-        tabla_filtrada = resumen[resumen['Grupo_Riesgo'] == riesgo_opcion]
-
-    columnas_monetarias = ['January', 'February', 'March', 'April', 'Total']
-    for col in columnas_monetarias:
-        if col in tabla_filtrada.columns:
-            tabla_filtrada[col] = tabla_filtrada[col].apply(lambda x: f"RD${x:,.2f}")
-
-    st.dataframe(tabla_filtrada[['Categoria', 'Grupo_Riesgo'] + columnas_monetarias], use_container_width=True)
-
-    # --- BLOQUE 5: DESCARGA DEL EXCEL FINAL ---
-    st.markdown("---")
-    st.markdown("## 📂 Descargar Reporte Consolidado Final")
-    try:
-        with open("Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx", "rb") as f:
-            bytes_data = f.read()
-            b64 = base64.b64encode(bytes_data).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx">📄 Descargar Cédula de Trabajo de Auditoría (Versión 80%)</a>'
-            st.markdown(href, unsafe_allow_html=True)
-    except FileNotFoundError:
-        st.error("❌ El archivo 'Cedula_de_Trabajo_de_Auditoria_FINAL.xlsx' no fue encontrado. Asegúrate de subirlo al entorno del proyecto.")
-else:
-    st.info("📄 Sube un archivo Excel para comenzar.")
+        st.dataframe(resumen[resumen["Grupo de Riesgo"] == seleccion], use_container_width=True)
