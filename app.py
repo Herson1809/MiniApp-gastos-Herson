@@ -60,26 +60,7 @@ if archivo:
         else:
             return "🟢 Bajo"
 
-    df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
-
-    resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
-    resumen['Total general'] = resumen[meses_orden].sum(axis=1)
-    resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
-    resumen.insert(0, 'No', resumen.index + 1)
-
-    # FILTRO
-    st.markdown("### 🔎 Filtra por Grupo de Riesgo")
-    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
-    seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
-
-    if seleccion != 'Ver Todos':
-        resumen_filtrado = resumen[resumen['Grupo_Riesgo'] == seleccion].copy()
-    else:
-        resumen_filtrado = resumen.copy()
-
-    total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
-    total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
-
+   
        # BLOQUE 4: CÉDULA AUDITOR (corregido % Participación por Sucursal + Mes)
     df['Mes'] = df['Fecha'].dt.strftime('%B')
     df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
