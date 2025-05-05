@@ -63,6 +63,9 @@ if archivo:
     resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
     resumen.insert(0, 'No', resumen.index + 1)
 
+    # ⛔️ Corrección de filtros: eliminar categorías con total 0 y verificar pertenencia correcta al grupo
+    resumen = resumen[resumen['Total general'] > 0]
+
     st.markdown("### 🔎 Filtra por Grupo de Riesgo")
     opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].dropna().unique())
     seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
@@ -82,7 +85,6 @@ if archivo:
 
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
 
-    # Cálculo de participación por sucursal y mes
     if 'Mes' in df.columns and 'Sucursales' in df.columns:
         df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
         df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
