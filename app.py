@@ -189,4 +189,3 @@ if archivo:
     )
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
-
