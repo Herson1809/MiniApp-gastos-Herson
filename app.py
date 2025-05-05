@@ -18,11 +18,11 @@ if archivo:
     df = pd.read_excel(archivo)
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Mes'] = df['Fecha'].dt.strftime('%B')
-    
+
     meses_orden = ['January', 'February', 'March', 'April']
     df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
-    # --- BLOQUE 1: GRÁFICO Y TOTALES ---
+    # BLOQUE 1: GRÁFICO Y TOTALES
     resumen_mes = df.groupby('Mes')['Monto'].sum().reindex(meses_orden)
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -35,13 +35,13 @@ if archivo:
         st.pyplot(fig)
 
     with col2:
-        st.markdown("### 🧾 Totales por Mes")
+        st.markdown("### 🧲 Totales por Mes")
         for mes, valor in resumen_mes.items():
             st.metric(label=mes, value=f"RD${valor:,.0f}")
         st.markdown("---")
         st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # --- BLOQUE 2: UMBRALES ---
+    # BLOQUE 2: UMBRALES
     st.markdown("---")
     st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
     st.markdown("""
@@ -51,7 +51,7 @@ if archivo:
     </table>
     """, unsafe_allow_html=True)
 
-    # --- BLOQUE 3: CLASIFICACIÓN DE RIESGO ---
+    # BLOQUE 3: ANÁLISIS POR RIESGO
     def clasificar_riesgo(monto):
         if monto >= 6000000:
             return "🔴 Crítico"
@@ -60,18 +60,13 @@ if archivo:
         else:
             return "🟢 Bajo"
 
-    suma_categoria = df.groupby('Categoria')['Monto'].sum()
-    riesgo_map = suma_categoria.apply(clasificar_riesgo).to_dict()
-    df['Grupo_Riesgo'] = df['Categoria'].map(riesgo_map)
-
-    resumen = pd.pivot_table(
-        df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto',
-        aggfunc='sum', fill_value=0).reset_index()
+    df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+    resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
     resumen['Total general'] = resumen[meses_orden].sum(axis=1)
     resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
     resumen.insert(0, 'No', resumen.index + 1)
 
-    # --- BLOQUE 4: FILTRO POR RIESGO ---
+    # FILTRO
     st.markdown("### 🔎 Filtra por Grupo de Riesgo")
     opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
     seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
@@ -82,8 +77,7 @@ if archivo:
         resumen_filtrado = resumen.copy()
 
     total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
-    total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
-
+    total_row = pd.DataFrame([["", "TOTAL GENERAL", ""] + list(total_row)], columns=resumen_filtrado.columns)
     resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
 
     for col in meses_orden + ['Total general']:
@@ -91,5 +85,32 @@ if archivo:
 
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
 
+    # BLOQUE 4: DESCARGA
+    def generar_excel():
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            wb = writer.book
+            formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+            formato_sub = wb.add_format({'font_size': 12})
+            formato_miles = wb.add_format({'num_format': '#,##0.00'})
+
+            resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
+            ws = writer.sheets["Resumen por Categoría"]
+            ws.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws.write("A3", "Auditor Asignado:", formato_sub)
+            ws.write("A4", "Fecha de la Auditoría", formato_sub)
+
+        output.seek(0)
+        return output
+
+    st.markdown("---")
+    st.markdown("## 📅 Descargar Excel Consolidado")
+    st.download_button(
+        label="📄 Descargar Reporte",
+        data=generar_excel(),
+        file_name="Cedula_Resumen_Categoria_FINAL_OK.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 else:
     st.info("📅 Por favor, sube un archivo Excel para comenzar.")
