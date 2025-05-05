@@ -83,6 +83,20 @@ if archivo:
     for col in meses_orden + ['Total general']:
         resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
 
+    
+    # Ajuste: Añadir TOTAL GENERAL al final del resumen completo exportado
+    if not resumen_filtrado.empty:
+        fila_total = pd.DataFrame([{
+            'No': '',
+            'Categoria': 'TOTAL GENERAL',
+            'Grupo_Riesgo': '',
+            **{mes: resumen_filtrado[mes].replace(",", "", regex=True).astype(float).sum() for mes in meses_orden},
+            'Total general': resumen_filtrado['Total general'].replace(",", "", regex=True).astype(float).sum()
+        }])
+        for col in meses_orden + ['Total general']:
+            fila_total[col] = fila_total[col].apply(lambda x: f"{x:,.2f}")
+        resumen_final = pd.concat([resumen_final[resumen_final['Categoria'] != 'TOTAL GENERAL'], fila_total], ignore_index=True)
+
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
 
     if 'Mes' in df.columns and 'Sucursales' in df.columns:
@@ -175,3 +189,4 @@ if archivo:
     )
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
+
