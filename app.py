@@ -1,122 +1,179 @@
+# app.py
+
+import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
+from io import BytesIO
+import base64
+import xlsxwriter
 
-# Cargar los datos
-df = pd.read_excel('Gastos RD al 20 de abril limpia.xlsx', sheet_name='Base')
+# --- CONFIGURACIÓN DE LA APP ---
+st.set_page_config(page_title="Auditoría de Gastos - Grupo FarmaValue", layout="wide")
 
-# Limpieza básica de datos
-df['Fecha'] = pd.to_datetime(df['Fecha'])
-df['Mes'] = df['Fecha'].dt.month_name()
-df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce')
+st.markdown("<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
+st.markdown("### 📥 Sube tu archivo Excel")
+archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
 
-# 1. Análisis general
-total_gastos = df['Monto'].sum()
-num_registros = len(df)
-promedio_gasto = df['Monto'].mean()
-gasto_max = df['Monto'].max()
-gasto_min = df['Monto'].min()
-
-# 2. Análisis por categoría
-gastos_por_categoria = df.groupby('Categoria')['Monto'].agg(['sum', 'count', 'mean']).sort_values('sum', ascending=False)
-
-# 3. Análisis por sucursal
-gastos_por_sucursal = df.groupby('Sucursales')['Monto'].agg(['sum', 'count', 'mean']).sort_values('sum', ascending=False)
-
-# 4. Análisis temporal
-gastos_por_dia = df.groupby(df['Fecha'].dt.date)['Monto'].sum()
-gastos_por_mes = df.groupby('Mes')['Monto'].sum()
-
-# 5. Top 10 gastos más altos
-top_gastos = df.nlargest(10, 'Monto')
-
-# 6. Distribución de montos
-plt.figure(figsize=(10, 6))
-sns.histplot(df['Monto'], bins=50, kde=True)
-plt.title('Distribución de Montos de Gastos')
-plt.xlabel('Monto')
-plt.ylabel('Frecuencia')
-plt.savefig('distribucion_montos.png')
-plt.close()
-
-# 7. Gráfico de gastos por categoría
-plt.figure(figsize=(12, 8))
-gastos_por_categoria['sum'].sort_values().plot(kind='barh')
-plt.title('Gastos Totales por Categoría')
-plt.xlabel('Monto Total')
-plt.ylabel('Categoría')
-plt.savefig('gastos_por_categoria.png')
-plt.close()
-
-# 8. Gráfico de gastos por sucursal (top 20)
-plt.figure(figsize=(12, 8))
-gastos_por_sucursal['sum'].nlargest(20).sort_values().plot(kind='barh')
-plt.title('Top 20 Sucursales por Gastos Totales')
-plt.xlabel('Monto Total')
-plt.ylabel('Sucursal')
-plt.savefig('gastos_por_sucursal.png')
-plt.close()
-
-# 9. Serie temporal de gastos
-plt.figure(figsize=(12, 6))
-gastos_por_dia.plot()
-plt.title('Evolución Diaria de Gastos')
-plt.xlabel('Fecha')
-plt.ylabel('Monto Total')
-plt.savefig('evolucion_gastos.png')
-plt.close()
-
-# Generar reporte en HTML
-html_report = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Reporte de Gastos RD al 20 de abril</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
-        h1, h2 {{ color: #2c3e50; }}
-        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
-        img {{ max-width: 100%; height: auto; display: block; margin: 20px auto; }}
-        .summary {{ background-color: #f9f9f9; padding: 15px; border-radius: 5px; }}
-    </style>
-</head>
-<body>
-    <h1>Reporte de Gastos RD al 20 de abril</h1>
+if archivo:
+    df = pd.read_excel(archivo)
+    df['Fecha'] = pd.to_datetime(df['Fecha'])
+    df['Mes'] = df['Fecha'].dt.strftime('%B')
     
-    <div class="summary">
-        <h2>Resumen General</h2>
-        <p><strong>Total de gastos:</strong> RD$ {total_gastos:,.2f}</p>
-        <p><strong>Número de registros:</strong> {num_registros:,}</p>
-        <p><strong>Gasto promedio:</strong> RD$ {promedio_gasto:,.2f}</p>
-        <p><strong>Gasto máximo:</strong> RD$ {gasto_max:,.2f}</p>
-        <p><strong>Gasto mínimo:</strong> RD$ {gasto_min:,.2f}</p>
-    </div>
-    
-    <h2>Gastos por Categoría</h2>
-    {gastos_por_categoria.to_html()}
-    
-    <h2>Top 10 Gastos más Altos</h2>
-    {top_gastos.to_html()}
-    
-    <h2>Distribución de Montos</h2>
-    <img src="distribucion_montos.png" alt="Distribución de Montos">
-    
-    <h2>Gastos por Categoría</h2>
-    <img src="gastos_por_categoria.png" alt="Gastos por Categoría">
-    
-    <h2>Top 20 Sucursales por Gastos</h2>
-    <img src="gastos_por_sucursal.png" alt="Gastos por Sucursal">
-    
-    <h2>Evolución Diaria de Gastos</h2>
-    <img src="evolucion_gastos.png" alt="Evolución de Gastos">
-</body>
-</html>
-"""
+    meses_orden = ['January', 'February', 'March', 'April']
+    df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
-# Guardar el reporte
-with open('reporte_gastos.html', 'w', encoding='utf-8') as f:
-    f.write(html_report)
+    # BLOQUE 1: GRÁFICO Y TOTALES
+    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex(meses_orden)
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.markdown("### 📊 Gasto por Mes")
+        fig, ax = plt.subplots()
+        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
+        resumen_mes.plot(kind='bar', ax=ax, color=colores)
+        ax.set_title("Gasto Mensual")
+        ax.set_ylabel("")
+        st.pyplot(fig)
 
-print("Reporte generado exitosamente como 'reporte_gastos.html'")
+    with col2:
+        st.markdown("### 🧾 Totales por Mes")
+        for mes, valor in resumen_mes.items():
+            st.metric(label=mes, value=f"RD${valor:,.0f}")
+        st.markdown("---")
+        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+
+    # BLOQUE 2: UMBRALES
+    st.markdown("---")
+    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
+    st.markdown("""
+    <table style='width:100%; text-align:center;'>
+        <tr><th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th></tr>
+        <tr><td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td></tr>
+    </table>
+    """, unsafe_allow_html=True)
+
+    # BLOQUE 3: ANÁLISIS POR RIESGO
+    def clasificar_riesgo(monto):
+        if monto >= 6000000:
+            return "🔴 Crítico"
+        elif monto >= 3000000:
+            return "🟡 Moderado"
+        else:
+            return "🟢 Bajo"
+
+    df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
+
+    resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
+    resumen['Total general'] = resumen[meses_orden].sum(axis=1)
+    resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
+    resumen.insert(0, 'No', resumen.index + 1)
+
+    # FILTRO
+    st.markdown("### 🔎 Filtra por Grupo de Riesgo")
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].unique())
+    seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
+
+    if seleccion != 'Ver Todos':
+        resumen_filtrado = resumen[resumen['Grupo_Riesgo'] == seleccion].copy()
+    else:
+        resumen_filtrado = resumen.copy()
+
+    total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
+    total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
+
+    resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
+
+    for col in meses_orden + ['Total general']:
+        resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
+
+    st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
+
+    # BLOQUE 4: CÉDULA AUDITOR
+    df['Gasto Total Sucursal'] = df.groupby('Sucursales')['Monto'].transform('sum')
+    df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal']) * 100
+
+    criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
+    criterio_revisar = (
+        (df['Monto'] >= 6000000) |
+        (df['% Participación'] > 25) |
+        criterios_snack
+    )
+    df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
+
+    df['Monto del Gasto'] = df['Monto'].round(2)
+    df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal'].round(2)
+    df['% Participación'] = df['% Participación'].round(2)
+    df['Verificado (☐)'] = ""
+    df['No Verificado (☐)'] = ""
+    df['Comentario del Auditor'] = ""
+
+    cedula = df[[
+        'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha', 'Monto del Gasto',
+        'Gasto Total de la Sucursal', '% Participación', '¿Revisar?',
+        'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
+    ]].rename(columns={
+        "Sucursales": "Sucursal",
+        "Categoria": "Categoría",
+        "Descripcion": "Descripción"
+    }).sort_values(by=['Sucursal', '% Participación'], ascending=[True, False])
+
+    # BLOQUE 5: CRITERIOS DE REVISIÓN
+    criterios = pd.DataFrame({
+        "Criterio": [
+            "Monto mayor o igual a RD$6,000,000",
+            "Participación mayor al 25%",
+            "Concepto sospechoso (ej: snack, comida, sin comprobante, misc, varios)"
+        ],
+        "Aplicación": [
+            "Riesgo Crítico automático",
+            "Alta participación en gasto de sucursal",
+            "Gasto hormiga o posible uso indebido"
+        ]
+    })
+
+    # BLOQUE 6: DESCARGA DEL EXCEL
+    st.markdown("---")
+    st.markdown("## 📥 Descargar Cedula de Trabajo Auditoría")
+
+    def generar_excel():
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            wb = writer.book
+            formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+            formato_sub = wb.add_format({'font_size': 12})
+            formato_miles = wb.add_format({'num_format': '#,##0.00'})
+
+            # Hoja 1
+            resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
+            ws1 = writer.sheets["Resumen por Categoría"]
+            ws1.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws1.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws1.write("A3", "Auditor Asignado:", formato_sub)
+            ws1.write("A4", "Fecha de la Auditoría", formato_sub)
+
+            # Hoja 2
+            criterios.to_excel(writer, sheet_name="Criterios de Revisión Auditor", startrow=5, index=False)
+            ws2 = writer.sheets["Criterios de Revisión Auditor"]
+            ws2.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws2.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws2.write("A3", "Auditor Asignado:", formato_sub)
+            ws2.write("A4", "Fecha de la Auditoría", formato_sub)
+
+            # Hoja 3
+            cedula.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
+            ws3 = writer.sheets["Cédula Auditor"]
+            ws3.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws3.write("A3", "Auditor Asignado:", formato_sub)
+            ws3.write("A4", "Fecha de la Auditoría", formato_sub)
+
+        output.seek(0)
+        return output
+
+    st.download_button(
+        label="📄 Descargar Excel Consolidado",
+        data=generar_excel(),
+        file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.info("📥 Por favor, sube un archivo Excel para comenzar.")
