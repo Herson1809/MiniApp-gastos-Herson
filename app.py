@@ -1,4 +1,3 @@
-# app.py
 
 import streamlit as st
 import pandas as pd
@@ -18,7 +17,7 @@ if archivo:
     df = pd.read_excel(archivo)
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Mes'] = df['Fecha'].dt.strftime('%B')
-    
+
     meses_orden = ['January', 'February', 'March', 'April']
     df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
@@ -60,16 +59,36 @@ if archivo:
         else:
             return "🟢 Bajo"
 
-   
-       # BLOQUE 4: CÉDULA AUDITOR (corregido % Participación por Sucursal + Mes)
-    df['Mes'] = df['Fecha'].dt.strftime('%B')
-    df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
+    df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
 
-    # Total por sucursal y mes
+    resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
+    resumen['Total general'] = resumen[meses_orden].sum(axis=1)
+    resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
+    resumen.insert(0, 'No', resumen.index + 1)
+
+    st.markdown("### 🔎 Filtra por Grupo de Riesgo")
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].dropna().unique())
+    seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
+
+    if seleccion != 'Ver Todos':
+        resumen_filtrado = resumen[resumen['Grupo_Riesgo'] == seleccion].copy()
+    else:
+        resumen_filtrado = resumen.copy()
+
+    total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
+    total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
+
+    resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
+
+    for col in meses_orden + ['Total general']:
+        resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
+
+    st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
+
+    # BLOQUE 4: CÉDULA AUDITOR
     df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
     df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
 
-    # Criterios de revisión
     criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
     criterio_revisar = (
         (df['Monto'] >= 6000000) |
@@ -78,7 +97,6 @@ if archivo:
     )
     df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
 
-    # Campos adicionales
     df['Monto del Gasto'] = df['Monto'].round(2)
     df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
     df['% Participación'] = df['% Participación'].round(2)
@@ -86,11 +104,14 @@ if archivo:
     df['No Verificado (☐)'] = ""
     df['Comentario del Auditor'] = ""
 
-    cedula = df[[  
-        'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha', 'Monto del Gasto',
-        'Gasto Total de la Sucursal', '% Participación', '¿Revisar?',
-        'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
-    ]].rename(columns={
+    columnas_a_usar = [
+        'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
+        'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
+        '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
+    ]
+
+    columnas_existentes = [col for col in columnas_a_usar if col in df.columns]
+    cedula = df[columnas_existentes].rename(columns={
         "Sucursales": "Sucursal",
         "Categoria": "Categoría",
         "Descripcion": "Descripción"
@@ -155,6 +176,5 @@ if archivo:
         file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
