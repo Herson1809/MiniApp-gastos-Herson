@@ -80,17 +80,15 @@ if archivo:
     total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
     total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
 
-    resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
+       # BLOQUE 4: CÉDULA AUDITOR (corregido % Participación por Sucursal + Mes)
+    df['Mes'] = df['Fecha'].dt.strftime('%B')
+    df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
-    for col in meses_orden + ['Total general']:
-        resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
+    # Total por sucursal y mes
+    df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
+    df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
 
-    st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
-
-    # BLOQUE 4: CÉDULA AUDITOR
-    df['Gasto Total Sucursal'] = df.groupby('Sucursales')['Monto'].transform('sum')
-    df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal']) * 100
-
+    # Criterios de revisión
     criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
     criterio_revisar = (
         (df['Monto'] >= 6000000) |
@@ -99,14 +97,15 @@ if archivo:
     )
     df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
 
+    # Campos adicionales
     df['Monto del Gasto'] = df['Monto'].round(2)
-    df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal'].round(2)
+    df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
     df['% Participación'] = df['% Participación'].round(2)
     df['Verificado (☐)'] = ""
     df['No Verificado (☐)'] = ""
     df['Comentario del Auditor'] = ""
 
-    cedula = df[[
+    cedula = df[[  
         'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha', 'Monto del Gasto',
         'Gasto Total de la Sucursal', '% Participación', '¿Revisar?',
         'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
@@ -175,5 +174,6 @@ if archivo:
         file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
