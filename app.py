@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -5,10 +6,8 @@ from io import BytesIO
 import base64
 import xlsxwriter
 
-# --- DEBE SER LA PRIMERA LLAMADA DE STREAMLIT ---
-st.set_page_config(page_title="Acceso Seguro - FarmaValue", layout="wide")
-
 # --- BLOQUE DE SEGURIDAD ---
+st.set_page_config(page_title="Acceso Seguro - FarmaValue", layout="wide")
 st.markdown("<h2 style='text-align: center;'>🔐 Acceso a la Auditoría de Gastos</h2>", unsafe_allow_html=True)
 password = st.text_input("Ingresa la contraseña para acceder a la aplicación:", type="password")
 
@@ -16,7 +15,7 @@ if password != "Herson2025":
     st.warning("🔒 Acceso restringido. Por favor, ingresa la contraseña correcta.")
     st.stop()
 
-# --- BLOQUE ORIGINAL DEL USUARIO ---
+# --- CONFIGURACIÓN DE LA APP ---
 st.markdown("<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
 st.markdown("### 📥 Sube tu archivo Excel")
 archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
@@ -85,22 +84,97 @@ if archivo:
     total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
 
     resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
-
     for col in meses_orden + ['Total general']:
         resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
 
-    if not resumen_filtrado.empty:
-        fila_total = pd.DataFrame([{
-            'No': '',
-            'Categoria': 'TOTAL GENERAL',
-            'Grupo_Riesgo': '',
-            **{mes: resumen_filtrado[mes].replace(",", "", regex=True).astype(float).sum() for mes in meses_orden},
-            'Total general': resumen_filtrado['Total general'].replace(",", "", regex=True).astype(float).sum()
-        }])
-        for col in meses_orden + ['Total general']:
-            fila_total[col] = fila_total[col].apply(lambda x: f"{x:,.2f}")
-        resumen_final = pd.concat([resumen_final[resumen_final['Categoria'] != 'TOTAL GENERAL'], fila_total], ignore_index=True)
-
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
+
+    if 'Mes' in df.columns and 'Sucursales' in df.columns:
+        df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
+        df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
+
+        criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
+        criterio_revisar = (
+            (df['Monto'] >= 6000000) |
+            (df['% Participación'] > 25) |
+            criterios_snack
+        )
+        df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
+
+        df['Monto del Gasto'] = df['Monto'].round(2)
+        df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
+        df['% Participación'] = df['% Participación'].round(2)
+        df['Verificado (☐)'] = ""
+        df['No Verificado (☐)'] = ""
+        df['Comentario del Auditor'] = ""
+
+        columnas = [
+            'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
+            'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
+            '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
+        ]
+        columnas_existentes = [col for col in columnas if col in df.columns]
+        cedula = df[columnas_existentes].rename(columns={
+            "Sucursales": "Sucursal",
+            "Categoria": "Categoría",
+            "Descripcion": "Descripción"
+        }).sort_values(by=['Sucursal', '% Participación'], ascending=[True, False])
+    else:
+        cedula = pd.DataFrame()
+
+    criterios = pd.DataFrame({
+        "Criterio": [
+            "Monto mayor o igual a RD$6,000,000",
+            "Participación mayor al 25%",
+            "Concepto sospechoso (ej: snack, comida, sin comprobante, misc, varios)"
+        ],
+        "Aplicación": [
+            "Riesgo Crítico automático",
+            "Alta participación en gasto de sucursal",
+            "Gasto hormiga o posible uso indebido"
+        ]
+    })
+
+    st.markdown("---")
+    st.markdown("## 📥 Descargar Cedula de Trabajo Auditoría")
+
+    def generar_excel():
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            wb = writer.book
+            formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+            formato_sub = wb.add_format({'font_size': 12})
+
+            resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
+            ws1 = writer.sheets["Resumen por Categoría"]
+            ws1.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws1.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws1.write("A3", "Auditor Asignado:", formato_sub)
+            ws1.write("A4", "Fecha de la Auditoría", formato_sub)
+
+            criterios.to_excel(writer, sheet_name="Criterios de Revisión Auditor", startrow=5, index=False)
+            ws2 = writer.sheets["Criterios de Revisión Auditor"]
+            ws2.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+            ws2.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+            ws2.write("A3", "Auditor Asignado:", formato_sub)
+            ws2.write("A4", "Fecha de la Auditoría", formato_sub)
+
+            if not cedula.empty:
+                cedula.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
+                ws3 = writer.sheets["Cédula Auditor"]
+                ws3.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
+                ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
+                ws3.write("A3", "Auditor Asignado:", formato_sub)
+                ws3.write("A4", "Fecha de la Auditoría", formato_sub)
+
+        output.seek(0)
+        return output
+
+    st.download_button(
+        label="📄 Descargar Excel Consolidado",
+        data=generar_excel(),
+        file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
