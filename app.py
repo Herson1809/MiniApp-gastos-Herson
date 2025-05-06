@@ -6,6 +6,15 @@ from io import BytesIO
 import base64
 import xlsxwriter
 
+# --- BLOQUE DE SEGURIDAD ---
+st.set_page_config(page_title="Acceso Seguro - FarmaValue", layout="wide")
+st.markdown("<h2 style='text-align: center;'>🔐 Acceso a la Auditoría de Gastos</h2>", unsafe_allow_html=True)
+password = st.text_input("Ingresa la contraseña para acceder a la aplicación:", type="password")
+
+if password != "Herson2025":
+    st.warning("🔒 Acceso restringido. Por favor, ingresa la contraseña correcta.")
+    st.stop()
+
 # --- CONFIGURACIÓN DE LA APP ---
 st.set_page_config(page_title="Auditoría de Gastos - Grupo FarmaValue", layout="wide")
 
