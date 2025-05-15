@@ -104,8 +104,8 @@ if archivo:
         df['Monto del Gasto'] = df['Monto'].round(2)
         df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
         df['% Participación'] = df['% Participación'].round(2)
-        df['Verificado (☐)'] = ""
-        df['No Verificado (☐)'] = ""
+        df['Verificado (☐)'] = "☐"
+        df['No Verificado (☐)'] = "☐"
         df['Comentario del Auditor'] = ""
 
         columnas = [
@@ -118,7 +118,7 @@ if archivo:
             "Sucursales": "Sucursal",
             "Categoria": "Categoría",
             "Descripcion": "Descripción"
-        }).sort_values(by=['Sucursal', '% Participación'], ascending=[True, False])
+        }).sort_values(by=['% Participación', '¿Revisar?'], ascending=[False, True])
     else:
         cedula = pd.DataFrame()
 
@@ -139,50 +139,52 @@ if archivo:
     st.markdown("## 📥 Descargar Cedula de Trabajo Auditoría")
 
     def generar_excel():
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        wb = writer.book
-        formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
-        formato_sub = wb.add_format({'font_size': 12})
-        formato_fecha = wb.add_format({'num_format': 'd/m/yyyy', 'align': 'center'})
-        formato_miles = wb.add_format({'num_format': '#,##0', 'align': 'center'})
-        formato_centrado = wb.add_format({'align': 'center'})
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            wb = writer.book
+            fmt_titulo = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
+            fmt_sub = wb.add_format({'font_size': 12})
+            fmt_miles = wb.add_format({'num_format': '#,##0.00'})
+            fmt_fecha = wb.add_format({'num_format': 'd/m/yyyy'})
+            fmt_centro = wb.add_format({'align': 'center'})
 
-        # Hoja 1 - Resumen
-        resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
-        ws1 = writer.sheets["Resumen por Categoría"]
-        ws1.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
-        ws1.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
-        ws1.write("A3", "Auditor Asignado:", formato_sub)
-        ws1.write("A4", "Fecha de la Auditoría", formato_sub)
+            resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
+            ws1 = writer.sheets["Resumen por Categoría"]
+            ws1.write("A1", "Auditoría grupo Farmavalue", fmt_titulo)
+            ws1.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", fmt_sub)
+            ws1.write("A3", "Auditor Asignado:", fmt_sub)
+            ws1.write("A4", "Fecha de la Auditoría", fmt_sub)
 
-        # Hoja 2 - Criterios
-        criterios.to_excel(writer, sheet_name="Criterios de Revisión Auditor", startrow=5, index=False)
-        ws2 = writer.sheets["Criterios de Revisión Auditor"]
-        ws2.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
-        ws2.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
-        ws2.write("A3", "Auditor Asignado:", formato_sub)
-        ws2.write("A4", "Fecha de la Auditoría", formato_sub)
+            criterios.to_excel(writer, sheet_name="Criterios de Revisión Auditor", startrow=5, index=False)
+            ws2 = writer.sheets["Criterios de Revisión Auditor"]
+            ws2.write("A1", "Auditoría grupo Farmavalue", fmt_titulo)
+            ws2.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", fmt_sub)
+            ws2.write("A3", "Auditor Asignado:", fmt_sub)
+            ws2.write("A4", "Fecha de la Auditoría", fmt_sub)
 
-        # Hoja 3 - Cédula Auditor (formato especial)
-        if not cedula.empty:
-            cedula_ordenada = cedula.sort_values(by=["% Participación", "¿Revisar?"], ascending=[False, True]).copy()
-            cedula_ordenada["Verificado (☐)"] = "☐"
-            cedula_ordenada["No Verificado (☐)"] = "☐"
+            if not cedula.empty:
+                cedula.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
+                ws3 = writer.sheets["Cédula Auditor"]
+                ws3.write("A1", "Auditoría grupo Farmavalue", fmt_titulo)
+                ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", fmt_sub)
+                ws3.write("A3", "Auditor Asignado:", fmt_sub)
+                ws3.write("A4", "Fecha de la Auditoría", fmt_sub)
 
-            cedula_ordenada.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
-            ws3 = writer.sheets["Cédula Auditor"]
-            ws3.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
-            ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
-            ws3.write("A3", "Auditor Asignado:", formato_sub)
-            ws3.write("A4", "Fecha de la Auditoría", formato_sub)
+                for col_idx, col in enumerate(cedula.columns):
+                    if col in ['Fecha']:
+                        ws3.set_column(col_idx, col_idx, 12, fmt_fecha)
+                    elif col in ['Monto del Gasto', 'Gasto Total de la Sucursal']:
+                        ws3.set_column(col_idx, col_idx, 18, fmt_miles)
+                    elif col in ['% Participación', '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)']:
+                        ws3.set_column(col_idx, col_idx, 15, fmt_centro)
+        output.seek(0)
+        return output
 
-            # Formato por columnas
-            ws3.set_column("E:E", 12, formato_fecha)
-            ws3.set_column("F:G", 18, formato_miles)
-            ws3.set_column("H:I", 14, formato_centrado)
-            ws3.set_column("J:K", 16, formato_centrado)
-            ws3.set_column("L:L", 30)
-
-    output.seek(0)
-    return output
+    st.download_button(
+        label="📄 Descargar Excel Consolidado",
+        data=generar_excel(),
+        file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.info("📥 Por favor, sube un archivo Excel para comenzar.")
