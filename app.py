@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -106,7 +107,7 @@ if archivo:
         df['Verificado (☐)'] = ""
         df['No Verificado (☐)'] = ""
         df['Comentario del Auditor'] = ""
-        df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')  # <--- CAMBIO REALIZADO AQUÍ
+        df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')  # CORREGIDO a D/M/A
 
         columnas = [
             'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
@@ -144,6 +145,8 @@ if archivo:
             wb = writer.book
             formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
             formato_sub = wb.add_format({'font_size': 12})
+            formato_centro = wb.add_format({'align': 'center'})
+            formato_miles = wb.add_format({'num_format': '#,##0', 'align': 'center'})
 
             resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
             ws1 = writer.sheets["Resumen por Categoría"]
@@ -166,6 +169,8 @@ if archivo:
                 ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
                 ws3.write("A3", "Auditor Asignado:", formato_sub)
                 ws3.write("A4", "Fecha de la Auditoría", formato_sub)
+                for col_idx in range(4, 11):
+                    ws3.set_column(col_idx, col_idx, 18, formato_centro)
 
         output.seek(0)
         return output
