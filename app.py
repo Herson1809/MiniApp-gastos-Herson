@@ -1,119 +1,123 @@
 
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from io import BytesIO
-import xlsxwriter
 import numpy as np
+import io
+from datetime import datetime
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import xlsxwriter
 
-# --- CONFIGURACIÓN DE LA APP ---
-st.set_page_config(page_title="Auditoría de Gastos - FarmaValue", layout="wide")
-st.markdown("<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
+# Configuración de página
+st.set_page_config(layout="wide", page_title="Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández")
 
-archivo = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
+# Estilos
+st.markdown("""<style>
+    .main {background-color: #111111;}
+    h1, h2, h3, h4, h5, h6, .stTextInput, .stSelectbox, .stSlider {
+        color: white;
+    }
+    .stButton>button {
+        color: white;
+        background-color: #4CAF50;
+    }
+</style>""", unsafe_allow_html=True)
 
-if archivo:
-    df = pd.read_excel(archivo)
-    df['Fecha'] = pd.to_datetime(df['Fecha'])
+# Encabezado
+st.title("🔐 Acceso a la Auditoría de Gastos")
+password = st.text_input("Ingresa la contraseña para acceder a la aplicación:", type="password")
+if password != "admin":
+    st.stop()
+
+st.markdown("## Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández")
+uploaded_file = st.file_uploader("Selecciona tu archivo de gastos", type=["xlsx"])
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file, sheet_name=0)
+
+    # Normalización de columnas esperadas
+    df.columns = [str(col).strip() for col in df.columns]
+    df.columns = df.columns.str.replace("Monto", "Monto", regex=False)
+
+    df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce')
     df['Mes'] = df['Fecha'].dt.strftime('%B')
-    meses_orden = ['January', 'February', 'March', 'April']
-    df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
+    df['Monto'] = pd.to_numeric(df['Monto'], errors='coerce')
 
-    resumen_mes = df.groupby('Mes')['Monto'].sum().reindex(meses_orden)
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.markdown("### 📊 Gasto por Mes")
-        fig, ax = plt.subplots()
-        colores = ['#3498db', '#f39c12', '#2ecc71', '#9b59b6']
-        resumen_mes.plot(kind='bar', ax=ax, color=colores)
-        ax.set_title("Gasto Mensual")
-        ax.set_ylabel("")
-        st.pyplot(fig)
+    # Total por mes
+    resumen = df.groupby('Mes')['Monto'].sum().reindex(['January', 'February', 'March', 'April'])
 
-    with col2:
-        st.markdown("### 🧾 Totales por Mes")
-        for mes, valor in resumen_mes.items():
-            st.metric(label=mes, value=f"RD${valor:,.0f}")
-        st.markdown("---")
-        st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
+    st.bar_chart(resumen)
 
-    st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
-    st.markdown("""
-    <table style='width:100%; text-align:center;'>
-        <tr><th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th></tr>
-        <tr><td>≥ RD$2,000,000 o ≥ 15%</td><td>≥ RD$1,000,000</td><td>Resto</td></tr>
-    </table>
-    """, unsafe_allow_html=True)
+    # --- ALGORITMO DE EVALUACIÓN ---
 
-    df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
-    df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
+    base = df.copy()
+    base['Total x Sucursal'] = base.groupby('Sucursal')['Monto'].transform('sum')
+    base['% Participación'] = (base['Monto'] / base['Total x Sucursal'] * 100).round(2)
 
-    sospechosas = ["recuperación", "seguro", "diferencia", "no cobrados", "ajuste",
-                   "reclasificación", "ARS", "SENASA", "MAPFRE", "AFILIADO", "ASEGURADO", "CXC"]
+    # Reglas
+    base['¿Revisar?'] = "No"
 
-    df['Repetido'] = df.groupby(['Mes', 'Descripcion'])['Descripcion'].transform('count')
-    df['Relacionado Seguro'] = df['Descripcion'].str.lower().apply(lambda x: any(p.lower() in x for p in sospechosas))
+    base.loc[base['Monto'] >= 2_000_000, '¿Revisar?'] = "Sí"
+    base.loc[base['% Participación'] >= 15, '¿Revisar?'] = "Sí"
 
-    df['¿Revisar?'] = np.where(
-        (df['Monto'] >= 2_000_000) |
-        (df['% Participación'] >= 15) |
-        (df['Repetido'] >= 3) |
-        (df['Relacionado Seguro']),
-        "Sí", "No"
-    )
+    # Gasto hormiga (3 o más repeticiones de descripción en el mismo mes)
+    repetidos = base.groupby(['Mes', 'Descripción']).transform('count')
+    base.loc[repetidos['Monto'] >= 3, '¿Revisar?'] = "Sí"
 
-    df['Monto del Gasto'] = df['Monto'].round(2)
-    df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
-    df['% Participación'] = df['% Participación'].round(2)
-    df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')
+    # Descripciones sospechosas
+    palabras_clave = ['recuperación', 'seguro', 'diferencia', 'no cobrados', 'ajuste', 'reclasificación', 'ARS', 'SENASA', 'MAPFRE', 'AFILIADO', 'ASEGURADO', 'CxC']
+    def es_sospechoso(texto):
+        texto = str(texto).lower()
+        return any(palabra.lower() in texto for palabra in palabras_clave)
 
-    df['Verificado (☐)'] = "☐"
-    df['No Verificado (☐)'] = "☐"
-    df['Comentario del Auditor'] = ""
+    base['Descripción_sospechosa'] = base['Descripción'].apply(es_sospechoso)
+    base.loc[base['Descripción_sospechosa'], '¿Revisar?'] = "Sí"
 
-    columnas_exportar = ['Sucursales', 'Categoria', 'Descripcion', 'Fecha',
-                         'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
-                         '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor']
-    cedula = df[columnas_exportar].rename(columns={
-        "Sucursales": "Sucursal",
-        "Categoria": "Categoría",
-        "Descripcion": "Descripción"
-    })
+    # Formato miles
+    base['Monto del Gasto'] = base['Monto'].round(0).map('{:,.0f}'.format)
+    base['Gasto Total de la Sucursal'] = base['Total x Sucursal'].round(0).map('{:,.0f}'.format)
 
-    def generar_excel():
-        output = BytesIO()
+    # Formato de fecha
+    base['Fecha'] = pd.to_datetime(base['Fecha'], errors='coerce').dt.strftime('%d/%m/%Y')
+
+    # Columnas finales
+    columnas_finales = ['Sucursal', 'Categoría', 'Descripción', 'Fecha', 'Monto del Gasto', 'Gasto Total de la Sucursal',
+                        '% Participación', '¿Revisar?']
+    cedula = base[columnas_finales].copy()
+    cedula['Verificado (☐)'] = ''
+    cedula['No Verificado (☐)'] = ''
+    cedula['Comentario del Auditor'] = ''
+
+    # Descargar Excel
+    def generar_excel(df_cedula):
+        output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            wb = writer.book
-            ws_name = "Cédula Auditor"
-            cedula.to_excel(writer, sheet_name=ws_name, startrow=5, index=False)
-            ws = writer.sheets[ws_name]
-            title_format = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
-            sub_format = wb.add_format({'font_size': 12})
-            center = wb.add_format({'align': 'center'})
-            miles = wb.add_format({'num_format': '#,##0', 'align': 'center'})
-            red = wb.add_format({'font_color': 'red'})
+            df_cedula.to_excel(writer, index=False, sheet_name='Cédula Auditoría')
+            workbook = writer.book
+            worksheet = writer.sheets['Cédula Auditoría']
 
-            ws.write("A1", "Auditoría grupo Farmavalue", title_format)
-            ws.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", sub_format)
-            ws.write("A3", "Auditor Asignado:", sub_format)
-            ws.write("A4", "Fecha de la Auditoría", sub_format)
+            title_format = workbook.add_format({'bold': True, 'font_color': 'red', 'font_size': 28})
+            subtitle_format = workbook.add_format({'bold': False, 'font_color': 'black', 'font_size': 12})
+            header_format = workbook.add_format({'bold': True, 'bg_color': '#C5D9F1', 'border': 1})
 
-            for col in range(4, 11):
-                ws.set_column(col, col, 20, center)
-            for col in [5, 6]:
-                ws.set_column(col, col, 20, miles)
+            # Insertar encabezado
+            worksheet.merge_range('A1:L1', 'Auditoría grupo Farmavalue', title_format)
+            worksheet.merge_range('A2:L2', 'Reporte de gastos del 01 de Enero al 20 de abril del 2025', subtitle_format)
+            worksheet.merge_range('A3:L3', 'Auditor Asignado:', subtitle_format)
+            worksheet.merge_range('A4:L4', 'Fecha de la Auditoría', subtitle_format)
 
-            desc_col = cedula.columns.get_loc("Descripción")
-            for row_num, val in enumerate(cedula['Descripción'], start=5):
-                if any(p.lower() in str(val).lower() for p in sospechosas):
-                    ws.write(row_num, desc_col, val, red)
+            for col_num, value in enumerate(df_cedula.columns.values):
+                worksheet.write(4, col_num, value, header_format)
 
+            worksheet.set_column('A:L', 22)
         output.seek(0)
         return output
 
+    excel_bytes = generar_excel(cedula)
+
     st.download_button(
-        label="📥 Descargar Excel Cédula Auditor",
-        data=generar_excel(),
+        label="📄 Descargar Excel Cédula Auditor",
+        data=excel_bytes,
         file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
