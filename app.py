@@ -6,7 +6,7 @@ from io import BytesIO
 import xlsxwriter
 import numpy as np
 
-# --- CONFIGURACION DE LA APP ---
+# --- CONFIGURACIÓN DE LA APP ---
 st.set_page_config(page_title="Auditoría de Gastos - FarmaValue", layout="wide")
 st.markdown("<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
 
@@ -41,30 +41,22 @@ if archivo:
     st.markdown("""
     <table style='width:100%; text-align:center;'>
         <tr><th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th></tr>
-        <tr><td>≥ RD$2,000,000 o ≥ 12%</td><td>≥ RD$1,000,000</td><td>Resto</td></tr>
+        <tr><td>≥ RD$2,000,000 o ≥ 15%</td><td>≥ RD$1,000,000</td><td>Resto</td></tr>
     </table>
     """, unsafe_allow_html=True)
 
     df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
     df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
 
-    sospechosas = ["recuperación", "seguro", "diferencia", "no cobrados", "ajuste", "reclasificación",
-                   "ARS", "SENASA", "MAPFRE", "AFILIADO", "ASEGURADO", "CXC"]
+    sospechosas = ["recuperación", "seguro", "diferencia", "no cobrados", "ajuste",
+                   "reclasificación", "ARS", "SENASA", "MAPFRE", "AFILIADO", "ASEGURADO", "CXC"]
 
     df['Repetido'] = df.groupby(['Mes', 'Descripcion'])['Descripcion'].transform('count')
-    df['Relacionado Seguro'] = df['Descripcion'].str.lower().apply(lambda x: any(p in x for p in [s.lower() for s in sospechosas]))
-
-    def clasificar_riesgo(row):
-        if row['Monto'] >= 2000000 or row['% Participación'] >= 12:
-            return "🔴 Crítico"
-        elif row['Monto'] >= 1000000:
-            return "🟡 Moderado"
-        else:
-            return "🟢 Bajo"
-    df['Grupo_Riesgo'] = df.apply(clasificar_riesgo, axis=1)
+    df['Relacionado Seguro'] = df['Descripcion'].str.lower().apply(lambda x: any(p.lower() in x for p in sospechosas))
 
     df['¿Revisar?'] = np.where(
-        (df['Grupo_Riesgo'] == '🔴 Crítico') |
+        (df['Monto'] >= 2_000_000) |
+        (df['% Participación'] >= 15) |
         (df['Repetido'] >= 3) |
         (df['Relacionado Seguro']),
         "Sí", "No"
@@ -73,8 +65,10 @@ if archivo:
     df['Monto del Gasto'] = df['Monto'].round(2)
     df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
     df['% Participación'] = df['% Participación'].round(2)
-    df['Verificado (☐)'] = ""
-    df['No Verificado (☐)'] = ""
+    df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')
+
+    df['Verificado (☐)'] = "☐"
+    df['No Verificado (☐)'] = "☐"
     df['Comentario del Auditor'] = ""
 
     columnas_exportar = ['Sucursales', 'Categoria', 'Descripcion', 'Fecha',
