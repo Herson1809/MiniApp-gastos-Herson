@@ -87,3 +87,4 @@ if archivo:
         file_name="Cedula_Auditor_OK.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
