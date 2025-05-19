@@ -42,7 +42,6 @@ if archivo:
         st.markdown("---")
         st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # --- UMBRALES VISUALES ---
     st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
     st.markdown("""
     <table style='width:100%; text-align:center;'>
@@ -82,9 +81,9 @@ if archivo:
         df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
         df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
 
-        sospechosas = "recuperación|seguro|diferencia|no cobrados|ajuste|reclasificación|ars|senasa|mapfre|afiliado|asegurado|cxc"
+        claves = "recuperación|seguro|diferencia|no cobrados|ajuste|reclasificación|ars|senasa|mapfre|afiliado|asegurado|cxc"
         criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
-        criterios_seguro = df['Descripcion'].str.contains(sospechosas, case=False, na=False)
+        criterios_seguro = df['Descripcion'].str.contains(claves, case=False, na=False)
         repetidos = df.groupby(['Descripcion', 'Mes'])['Descripcion'].transform('count') >= 3
 
         criterio_revisar = (
@@ -161,11 +160,12 @@ if archivo:
                 ws3.write("A3", "Auditor Asignado:", sub)
                 ws3.write("A4", "Fecha de la Auditoría", sub)
 
-                # --- APLICAR FORMATO ROJO ---
                 col_idx = cedula.columns.get_loc("Descripción")
+                palabras_clave = ["recuperación", "seguro", "diferencia", "no cobrados", "ajuste",
+                                  "reclasificación", "ars", "senasa", "mapfre", "afiliado", "asegurado", "cxc"]
                 for row_num, value in enumerate(cedula["Descripción"], start=5):
-                    if any(p in str(value).lower() for p in ["recuperación", "seguro", "diferencia", "no cobrados", "ajuste", "reclasificación", "ars", "senasa", "mapfre", "afiliado", "asegurado", "cxc"]):
-                        ws3.write(row_num, col_idx, value, rojo)
+                    if any(p in str(value).lower() for p in palabras_clave):
+                        ws3.write_string(row_num, col_idx, str(value), rojo)
 
         output.seek(0)
         return output
