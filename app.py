@@ -1,9 +1,7 @@
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
-import base64
 import xlsxwriter
 
 # --- BLOQUE DE SEGURIDAD ---
@@ -23,7 +21,6 @@ if archivo:
     df = pd.read_excel(archivo)
     df['Fecha'] = pd.to_datetime(df['Fecha'])
     df['Mes'] = df['Fecha'].dt.strftime('%B').astype(str)
-
     meses_orden = ['January', 'February', 'March', 'April']
     df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
@@ -37,7 +34,6 @@ if archivo:
         ax.set_title("Gasto Mensual")
         ax.set_ylabel("")
         st.pyplot(fig)
-
     with col2:
         st.markdown("### 🧾 Totales por Mes")
         for mes, valor in resumen_mes.items():
@@ -50,20 +46,19 @@ if archivo:
     st.markdown("""
     <table style='width:100%; text-align:center;'>
         <tr><th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th></tr>
-        <tr><td>≥ RD$6,000,000</td><td>≥ RD$3,000,000 y < RD$6,000,000</td><td>< RD$3,000,000</td></tr>
+        <tr><td>≥ RD$2,000,000</td><td>≥ RD$1,000,000 y < RD$2,000,000</td><td>< RD$1,000,000</td></tr>
     </table>
     """, unsafe_allow_html=True)
 
     def clasificar_riesgo(monto):
-        if monto >= 6000000:
+        if monto >= 2000000:
             return "🔴 Crítico"
-        elif monto >= 3000000:
+        elif monto >= 1000000:
             return "🟡 Moderado"
         else:
             return "🟢 Bajo"
 
     df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
-
     resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
     resumen['Total general'] = resumen[meses_orden].sum(axis=1)
     resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
@@ -73,85 +68,70 @@ if archivo:
     st.markdown("### 🔎 Filtra por Grupo de Riesgo")
     opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].dropna().unique())
     seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
-
-    if seleccion != 'Ver Todos':
-        resumen_filtrado = resumen[resumen['Grupo_Riesgo'] == seleccion].copy()
-    else:
-        resumen_filtrado = resumen.copy()
+    resumen_filtrado = resumen if seleccion == 'Ver Todos' else resumen[resumen['Grupo_Riesgo'] == seleccion].copy()
 
     total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
     total_row = pd.DataFrame([['', 'TOTAL GENERAL', ''] + list(total_row)], columns=resumen_filtrado.columns)
-
     resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
     for col in meses_orden + ['Total general']:
         resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
-
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
 
     if 'Mes' in df.columns and 'Sucursales' in df.columns:
         df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
         df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
 
-        keywords_snack = "comida|snack|sin comprobante|misc|varios"
-        keywords_seguro = "recuperación|seguro|diferencia|no cobrados|ajuste|reclasificación|ARS|SENASA|MAPFRE|AFILIADO|ASEGURADO|CxC"
-
-        criterios_snack = df['Descripcion'].str.contains(keywords_snack, case=False, na=False)
-        criterios_seguro = df['Descripcion'].str.contains(keywords_seguro, case=False, na=False)
-
-        # Detección de gastos hormiga repetitivos
-        df['Conteo_Repetidos'] = df.groupby(['Mes', 'Descripcion'])['Descripcion'].transform('count')
+        criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
+        criterios_seguro = df['Descripcion'].str.contains("recuperación|seguro|diferencia|no cobrados|ajuste|reclasificación|ARS|SENASA|MAPFRE|AFILIADO|ASEGURADO|CxC", case=False, na=False)
+        repetidos = df.duplicated(subset=['Mes', 'Descripcion'], keep=False)
         criterio_revisar = (
             (df['Monto'] >= 2000000) |
             (df['% Participación'] >= 15) |
             criterios_snack |
             criterios_seguro |
-            (df['Conteo_Repetidos'] >= 3)
+            repetidos
         )
-
         df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
-        df['Descripción'] = df['Descripcion']
-        df.loc[criterios_seguro | df['Descripcion'].str.contains("CxC", case=False, na=False), 'Descripción'] = df['Descripcion'].apply(lambda x: f"⚠ {x}")
-
         df['Monto del Gasto'] = df['Monto'].round(2)
         df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
         df['% Participación'] = df['% Participación'].round(2)
         df['Verificado (☐)'] = "☐"
         df['No Verificado (☐)'] = "☐"
         df['Comentario del Auditor'] = ""
+
         df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')
+        df['Descripcion'] = df['Descripcion'].apply(lambda x: f"[ROJO]{x}" if any(c in str(x).upper() for c in ["SEGURO", "ARS", "SENASA", "MAPFRE", "CX C", "AFILIADO", "ASEGURADO", "RECLASIFICACIÓN", "RECUPERACIÓN", "NO COBRADOS"]) else x)
 
         columnas = [
-            'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripción', 'Fecha',
+            'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
             'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
             '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
         ]
         columnas_existentes = [col for col in columnas if col in df.columns]
         cedula = df[columnas_existentes].rename(columns={
             "Sucursales": "Sucursal",
-            "Categoria": "Categoría"
-        }).sort_values(by=['% Participación', '¿Revisar?'], ascending=[False, True])
+            "Categoria": "Categoría",
+            "Descripcion": "Descripción"
+        }).sort_values(by=['Sucursal', '% Participación'], ascending=[True, False])
     else:
         cedula = pd.DataFrame()
 
     criterios = pd.DataFrame({
         "Criterio": [
             "Monto mayor o igual a RD$2,000,000",
-            "Participación mayor al 15%",
+            "Participación mayor o igual al 15%",
             "Concepto sospechoso (ej: snack, comida, sin comprobante, misc, varios)",
-            "Repetidos 3 veces en el mes",
-            "Relacionado con seguros, ARS o CxC"
+            "Repetido más de 3 veces en el mes",
+            "Posible encubrimiento por temas de seguros (ARS, MAPFRE, etc.)"
         ],
         "Aplicación": [
             "Riesgo Crítico automático",
             "Alta participación en gasto de sucursal",
             "Gasto hormiga o posible uso indebido",
-            "Identificación automática como gasto repetido",
-            "⚠ Advertencia por posible encubrimiento de diferencias"
+            "Alerta por repetición (gasto hormiga)",
+            "Alerta de auditoría por mal registro o encubrimiento"
         ]
     })
-
-    st.markdown("---")
-    st.markdown("## 📥 Descargar Excel Cédula Auditor")
 
     def generar_excel():
         output = BytesIO()
@@ -159,7 +139,6 @@ if archivo:
             wb = writer.book
             formato_encabezado = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
             formato_sub = wb.add_format({'font_size': 12})
-
             resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
             ws1 = writer.sheets["Resumen por Categoría"]
             ws1.write("A1", "Auditoría grupo Farmavalue", formato_encabezado)
@@ -181,7 +160,6 @@ if archivo:
                 ws3.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", formato_sub)
                 ws3.write("A3", "Auditor Asignado:", formato_sub)
                 ws3.write("A4", "Fecha de la Auditoría", formato_sub)
-
         output.seek(0)
         return output
 
