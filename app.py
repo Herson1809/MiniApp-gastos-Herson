@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import BytesIO
 import xlsxwriter
+import re
 
 # --- BLOQUE DE SEGURIDAD ---
 st.set_page_config(page_title="Acceso Seguro - FarmaValue", layout="wide")
@@ -86,17 +87,17 @@ if archivo:
         df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
         df['% Participación'] = df['% Participación'].round(2)
 
-        # Palabras clave aseguradoras y CxC
-        palabras_clave_sospechosas = [
-            'recuperación', 'seguro', 'diferencia', 'no cobrados', 'ajuste',
-            'reclasificación', 'ars', 'senasa', 'mapfre', 'afiliado', 'asegurado', 'cxc'
+        palabras_clave = [
+            'cxc', 'ars', 'senasa', 'mapfre', 'afiliado', 'asegurado', 
+            'recuperación', 'seguro', 'diferencia', 'no cobrados', 'ajuste', 'reclasificación'
         ]
 
-        df['Descripcion_Limpia'] = df['Descripcion'].astype(str).str.lower()
-        df['Sospechosa'] = df['Descripcion_Limpia'].apply(lambda x: any(p in x for p in palabras_clave_sospechosas))
+        def es_sospechosa(desc):
+            desc = str(desc).lower()
+            return any(re.search(rf"\\b{palabra}\\b", desc) for palabra in palabras_clave)
 
+        df['Sospechosa'] = df['Descripcion'].apply(es_sospechosa)
         criterios_snack = df['Descripcion'].str.contains("comida|snack|sin comprobante|misc|varios", case=False, na=False)
-
         criterio_revisar = (
             (df['Monto'] >= 2000000) |
             (df['% Participación'] > 15) |
@@ -106,7 +107,6 @@ if archivo:
 
         df['¿Revisar?'] = criterio_revisar.map({True: "Sí", False: "No"})
         df['Color'] = df['Sospechosa'].map({True: 'color: red;', False: ''})
-
         df['Monto del Gasto'] = df['Monto'].round(2)
         df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
         df['Verificado (☐)'] = "☐"
@@ -175,7 +175,7 @@ if archivo:
 
                 col_idx = cedula.columns.get_loc("Descripción")
                 for row_num, value in enumerate(cedula["Descripción"], start=5):
-                    if any(p in str(value).lower() for p in palabras_clave_sospechosas):
+                    if any(re.search(rf"\\b{palabra}\\b", str(value).lower()) for palabra in palabras_clave):
                         ws3.write_string(row_num, col_idx, str(value), rojo)
 
         output.seek(0)
