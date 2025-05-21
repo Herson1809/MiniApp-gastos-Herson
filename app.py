@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,12 +14,12 @@ if password != "Herson2025":
 
 # --- ENCABEZADO DE LA APP ---
 st.markdown("<h1 style='text-align: center; color: white;'>Auditoría a Gastos por País - Grupo FarmaValue_Herson Hernández</h1>", unsafe_allow_html=True)
-archivo = st.file_uploader("📥 Sube tu archivo Excel", type=["xlsx"])
+archivo = st.file_uploader("📅 Sube tu archivo Excel", type=["xlsx"])
 
 if archivo:
     df = pd.read_excel(archivo)
     df['Fecha'] = pd.to_datetime(df['Fecha'])
-    df['Mes'] = df['Fecha'].dt.strftime('%B').astype(str)
+    df['Mes'] = df['Fecha'].dt.strftime('%B')
     meses_orden = ['January', 'February', 'March', 'April']
     df['Mes'] = pd.Categorical(df['Mes'], categories=meses_orden, ordered=True)
 
@@ -36,21 +35,20 @@ if archivo:
         st.pyplot(fig)
 
     with col2:
-        st.markdown("### 🧾 Totales por Mes")
+        st.markdown("### 🧽 Totales por Mes")
         for mes, valor in resumen_mes.items():
             st.metric(label=mes, value=f"RD${valor:,.0f}")
         st.markdown("---")
         st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # --- UMBRALES DE RIESGO ---
+    # --- UMBRALES ---
     st.markdown("---")
     st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
     st.markdown("""
     <table style='width:100%; text-align:center;'>
         <tr><th>🔴 Crítico</th><th>🟡 Moderado</th><th>🟢 Bajo</th></tr>
         <tr><td>≥ RD$2,000,000</td><td>≥ RD$1,000,000 y < RD$2,000,000</td><td>< RD$1,000,000</td></tr>
-    </table>
-    """, unsafe_allow_html=True)
+    </table>""", unsafe_allow_html=True)
 
     def clasificar_riesgo(monto):
         if monto >= 2000000:
@@ -62,65 +60,111 @@ if archivo:
 
     df['Grupo_Riesgo'] = df.groupby('Categoria')['Monto'].transform('sum').apply(clasificar_riesgo)
 
-    # --- CRITERIO SEGURO ---
-    palabras_clave = [
-        "recuperación", "seguro", "diferencia", "no cobrados", "ajuste",
-        "reclasificación", "ARS", "SENASA", "MAPFRE", "AFILIADO", "ASEGURADO", "CXC"
-    ]
-    # Detectar todas las descripciones sospechosas
-    sospechosas = df['Descripcion'].dropna().astype(str).apply(
-        lambda x: any(p.lower() in x.lower() for p in palabras_clave)
-    )
-    descripciones_sospechosas = df.loc[sospechosas, 'Descripcion'].unique()
+    resumen = pd.pivot_table(df, index=['Categoria', 'Grupo_Riesgo'], columns='Mes', values='Monto', aggfunc='sum', fill_value=0).reset_index()
+    resumen['Total general'] = resumen[meses_orden].sum(axis=1)
+    resumen = resumen.sort_values(by='Total general', ascending=False).reset_index(drop=True)
+    resumen.insert(0, 'No', resumen.index + 1)
+    resumen = resumen[resumen['Total general'] > 0]
 
-    # Aplicar la lógica para todos los duplicados de esas descripciones
-    df['Sospechosa'] = df['Descripcion'].isin(descripciones_sospechosas)
-    df['¿Revisar?'] = df['Sospechosa'].map({True: "Sí"}).fillna("No")
-    df['Descripcion'] = df.apply(
-        lambda row: f"<span style='color:red'>{row['Descripcion']}</span>" if row['Sospechosa'] else row['Descripcion'],
-        axis=1
-    )
+    st.markdown("### 🔎 Filtra por Grupo de Riesgo")
+    opciones = ['Ver Todos'] + sorted(resumen['Grupo_Riesgo'].dropna().unique())
+    seleccion = st.selectbox("Selecciona un grupo de riesgo:", opciones)
+    resumen_filtrado = resumen if seleccion == 'Ver Todos' else resumen[resumen['Grupo_Riesgo'] == seleccion]
 
-    df['Monto del Gasto'] = df['Monto'].round(2)
-    df['Gasto Total de la Sucursal'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum').round(2)
-    df['% Participación'] = ((df['Monto'] / df['Gasto Total de la Sucursal']) * 100).round(2)
-    df['Verificado (☐)'] = "☐"
-    df['No Verificado (☐)'] = "☐"
-    df['Comentario del Auditor'] = ""
-    df['Fecha'] = df['Fecha'].dt.strftime('%d/%m/%Y')
+    total_row = resumen_filtrado[meses_orden + ['Total general']].sum()
+    total_row = pd.DataFrame([["", "TOTAL GENERAL", ""] + list(total_row)], columns=resumen_filtrado.columns)
+    resumen_final = pd.concat([resumen_filtrado, total_row], ignore_index=True)
+    for col in meses_orden + ['Total general']:
+        resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
 
-    columnas = [
-        'Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
-        'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
-        '¿Revisar?', 'Verificado (☐)', 'No Verificado (☐)', 'Comentario del Auditor'
-    ]
+    st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
 
-    df_out = df[columnas].rename(columns={
-        "Sucursales": "Sucursal", "Categoria": "Categoría", "Descripcion": "Descripción"
-    }).sort_values(by=['% Participación'], ascending=False)
+    if 'Mes' in df.columns and 'Sucursales' in df.columns:
+        df['Gasto Total Sucursal Mes'] = df.groupby(['Sucursales', 'Mes'])['Monto'].transform('sum')
+        df['% Participación'] = (df['Monto'] / df['Gasto Total Sucursal Mes']) * 100
+        df['% Participación'] = df['% Participación'].round(2)
+
+        patrones = ['recuperación', 'seguro', 'diferencia', 'no cobrados', 'ajuste', 'reclasificación', 'ARS', 'SENASA', 'MAPFRE', 'AFILIADO', 'ASEGURADO', 'CXC']
+        sospechosas = df['Descripcion'].astype(str).str.contains('|'.join(patrones), case=False, na=False)
+
+        repeticiones = df['Descripcion'].astype(str).duplicated(keep=False)
+        df['Marcar_Rojo'] = sospechosas | repeticiones
+
+        criterio_revisar = (
+            (df['Monto'] >= 2000000) |
+            (df['% Participación'] > 15) |
+            df['Marcar_Rojo']
+        )
+
+        df['¿Revisar?'] = criterio_revisar.map({True: 'Sí', False: 'No'})
+        df['Monto del Gasto'] = df['Monto'].round(2)
+        df['Gasto Total de la Sucursal'] = df['Gasto Total Sucursal Mes'].round(2)
+        df['Verificado (☑)'] = "☑"
+        df['No Verificado (☑)'] = "☑"
+        df['Comentario del Auditor'] = ""
+
+        df['Descripcion'] = df.apply(lambda x: f"<span style='color:red'>{x['Descripcion']}</span>" if x['Marcar_Rojo'] else x['Descripcion'], axis=1)
+
+        columnas = ['Sucursales', 'Grupo_Riesgo', 'Categoria', 'Descripcion', 'Fecha',
+                    'Monto del Gasto', 'Gasto Total de la Sucursal', '% Participación',
+                    '¿Revisar?', 'Verificado (☑)', 'No Verificado (☑)', 'Comentario del Auditor']
+
+        cedula = df[columnas].rename(columns={
+            "Sucursales": "Sucursal",
+            "Categoria": "Categoría",
+            "Descripcion": "Descripción"
+        }).sort_values(by=['% Participación'], ascending=False)
+
+        cedula['Fecha'] = pd.to_datetime(cedula['Fecha']).dt.strftime('%d/%m/%Y')
+    else:
+        cedula = pd.DataFrame()
+
+    criterios = pd.DataFrame({
+        "Criterio": [
+            "Monto mayor o igual a RD$2,000,000",
+            "Participación mayor al 15%",
+            "Descripción sospechosa (ARS, seguro, CxC...)",
+            "Descripción repetida en otra sucursal"
+        ],
+        "Aplicación": [
+            "Riesgo Crítico automático",
+            "Alta participación en gasto de sucursal",
+            "Marcado en rojo y sujeto a revisión",
+            "Todas las repeticiones marcadas"
+        ]
+    })
 
     def generar_excel():
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             wb = writer.book
             header = wb.add_format({'bold': True, 'font_size': 28, 'font_color': 'red'})
-            subheader = wb.add_format({'font_size': 12})
+            sub = wb.add_format({'font_size': 12})
 
-            df_out.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
-            ws1 = writer.sheets["Cédula Auditor"]
-            ws1.write("A1", "Auditoría grupo Farmavalue", header)
-            ws1.write("A2", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", subheader)
-            ws1.write("A3", "Auditor Asignado:", subheader)
-            ws1.write("A4", "Fecha de la Auditoría", subheader)
+            resumen_final.to_excel(writer, sheet_name="Resumen por Categoría", startrow=5, index=False)
+            ws1 = writer.sheets["Resumen por Categoría"]
+            for i, v in enumerate(["Auditoría grupo Farmavalue", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", "Auditor Asignado:", "Fecha de la Auditoría"]):
+                ws1.write(f"A{i+1}", v, header if i == 0 else sub)
 
+            criterios.to_excel(writer, sheet_name="Criterios de Revisión Auditor", startrow=5, index=False)
+            ws2 = writer.sheets["Criterios de Revisión Auditor"]
+            for i, v in enumerate(["Auditoría grupo Farmavalue", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", "Auditor Asignado:", "Fecha de la Auditoría"]):
+                ws2.write(f"A{i+1}", v, header if i == 0 else sub)
+
+            if not cedula.empty:
+                cedula.to_excel(writer, sheet_name="Cédula Auditor", startrow=5, index=False)
+                ws3 = writer.sheets["Cédula Auditor"]
+                for i, v in enumerate(["Auditoría grupo Farmavalue", "Reporte de gastos del 01 de Enero al 20 de abril del 2025", "Auditor Asignado:", "Fecha de la Auditoría"]):
+                    ws3.write(f"A{i+1}", v, header if i == 0 else sub)
         output.seek(0)
         return output
 
+    st.markdown("---")
     st.download_button(
         label="📄 Descargar Excel Cédula Auditor",
         data=generar_excel(),
-        file_name="Cedula_Trabajo_OK_FINAL.xlsx",
+        file_name="Cedula_Trabajo_3Hojas_OK.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 else:
-    st.info("📥 Por favor, sube un archivo Excel para comenzar.")
+    st.info("📅 Por favor, sube un archivo Excel para comenzar.")
