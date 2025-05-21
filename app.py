@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -42,7 +43,7 @@ if archivo:
         st.markdown("---")
         st.metric(label="Gran Total", value=f"RD${resumen_mes.sum():,.0f}")
 
-    # --- UMBRALES DE RIESGO ---
+    # --- UMBRALES DE RIESGO ACTUALIZADOS ---
     st.markdown("---")
     st.markdown("## 🛑 Tabla de Umbrales de Riesgo")
     st.markdown("""
@@ -81,5 +82,6 @@ if archivo:
         resumen_final[col] = resumen_final[col].apply(lambda x: f"{x:,.2f}" if pd.notna(x) else x)
 
     st.dataframe(resumen_final[['No', 'Categoria', 'Grupo_Riesgo'] + meses_orden + ['Total general']], use_container_width=True)
+
 else:
     st.info("📥 Por favor, sube un archivo Excel para comenzar.")
